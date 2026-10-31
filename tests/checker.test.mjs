@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkAll, normalizeName, validateInput, PLATFORMS, STATUS, TLDS } from '../site/checker.js';
+import { checkAll, domainEnding, linkFor, normalizeName, validateInput, PLATFORMS, STATUS, TLDS } from '../site/checker.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const html = (status) => new Response('<!doctype html><title>x</title>', { status, headers: { 'content-type': 'text/html' } });
@@ -33,26 +33,50 @@ async function check(ids, name, routes) {
   return { ...out[list.at(-1)], calls: fetch.calls };
 }
 
+/** The ids of the platforms (default: all) whose username rules `name` breaks. */
+async function invalidFor(name, ids = PLATFORMS.map((p) => p.id)) {
+  const out = await checkAll(name, { fetch: mockFetch([]), platforms: PLATFORMS.filter((p) => ids.includes(p.id)) });
+  return Object.keys(out).filter((id) => out[id].status === STATUS.INVALID).sort();
+}
+
+const byId = Object.fromEntries(PLATFORMS.map((p) => [p.id, p]));
+
 describe('normalizeName', () => {
   for (const [input, expected] of [
     ['  AcmeRocket ', 'acmerocket'],
     ['@acme', 'acme'],
     ['Acme Rocket', 'acmerocket'],
-    ['acme.com', 'acme'],
-    ['acme.app', 'acme'],
-    ['https://www.acme.com/', 'acme'],
-    ['acme.io', 'acme'],
-    ['https://acme.ai', 'acme'],
-    ['acme.com.co', 'acme.com'],
-    ['acme.dev', 'acme'],
-    ['acme.cloud', 'acme'],
-    ['acme.xyz', 'acme'],
-    ['acme.info', 'acme'],
-    ['https://acme.store/', 'acme'],
+    ['acme.com', 'acme.com'],
+    ['Acme.Design', 'acme.design'],
+    ['https://www.acme.com/', 'acme.com'],
+    ['https://acme.ai', 'acme.ai'],
+    ['acme.com.co', 'acme.com.co'],
+    ['https://acme.store/', 'acme.store'],
+    ['@acme. design', 'acme.design'],
+    ['acme..design', 'acme.design'],
+    ['acme.design.', 'acme.design'],
+    ['.acme.', 'acme'],
     ['deno.land', 'deno.land'],
     [undefined, ''],
   ]) {
     test(`${JSON.stringify(input)} -> ${JSON.stringify(expected)}`, () => assert.equal(normalizeName(input), expected));
+  }
+});
+
+describe('domainEnding', () => {
+  for (const [name, expected] of [
+    ['acme.design', 'design'],
+    ['acme.com', 'com'],
+    ['acme.co', 'co'],
+    ['acme.com.co', 'co'],
+    ['acme.rocket.io', 'io'],
+    ['a.ai', 'ai'],
+    ['acme', null],
+    ['acmedesign', null],
+    ['design', null],
+    ['deno.land', null],
+  ]) {
+    test(`${JSON.stringify(name)} -> ${JSON.stringify(expected)}`, () => assert.equal(domainEnding(name), expected));
   }
 });
 
@@ -61,16 +85,17 @@ describe('validateInput', () => {
   test('rejects empty input', () => assert.match(validateInput(''), /enter a name/i));
   test('rejects symbols', () => assert.match(validateInput('acme!'), /only letters/i));
   test('rejects very long names', () => assert.match(validateInput('a'.repeat(64)), /63/));
+  test('does not count a domain ending towards the length', () => {
+    assert.equal(validateInput(`${'a'.repeat(63)}.design`), null);
+    assert.equal(validateInput(`${'a'.repeat(63)}.co`), null);
+    assert.match(validateInput(`${'a'.repeat(64)}.design`), /before \.design to 63/);
+    assert.match(validateInput(`${'a'.repeat(62)}.land`), /to 63 characters/);
+  });
 });
 
 describe('platform rules', () => {
-  const invalidFor = async (name, ids = PLATFORMS.map((p) => p.id)) => {
-    const out = await checkAll(name, { fetch: mockFetch([]), platforms: PLATFORMS.filter((p) => ids.includes(p.id)) });
-    return Object.keys(out).filter((id) => out[id].status === STATUS.INVALID).sort();
-  };
-
   test('underscores are not valid in domains and some platforms', async () => {
-    const expected = [...TLDS, 'bluesky', 'discord', 'facebook', 'github', 'linkedin', 'substack', 'tumblr'].sort();
+    const expected = [...TLDS, 'bluesky', 'discord', 'facebook', 'github', 'substack', 'tumblr'].sort();
     assert.deepEqual(await invalidFor('acme_rocket'), expected);
   });
 
@@ -88,6 +113,12 @@ describe('platform rules', () => {
     assert.deepEqual(await invalidFor('acmerocketlaunchpad', ['bluesky']), ['bluesky']);
   });
 
+  test('Bluesky domain handles follow the domain rules instead', async () => {
+    assert.deepEqual(await invalidFor('acmerocketlaunchpad.design', ['bluesky']), []);
+    assert.deepEqual(await invalidFor('a.ai', ['bluesky']), []);
+    assert.deepEqual(await invalidFor('acme_rocket.design', ['bluesky', 'design']), ['bluesky', 'design']);
+  });
+
   test('short names are rejected where platforms require a minimum length', async () => {
     const expected = ['bluesky', 'facebook', 'pinterest', 'reddit', 'telegram', 'twitch', 'youtube'];
     assert.deepEqual(await invalidFor('ab'), expected);
@@ -100,6 +131,92 @@ describe('platform rules', () => {
   test('IDN-style double hyphens are rejected for domains', async () => {
     const invalid = await invalidFor('ab--cd', [...TLDS]);
     assert.deepEqual(invalid, [...TLDS].sort());
+  });
+
+  test('LinkedIn company URLs allow periods, hyphens and underscores inside the name', async () => {
+    for (const name of ['acme.design', 'acme-rocket', 'acme_rocket', 'a1']) assert.deepEqual(await invalidFor(name, ['linkedin']), [], name);
+    for (const name of ['a', '_acme', 'acme-', 'acmelinkedin']) assert.deepEqual(await invalidFor(name, ['linkedin']), ['linkedin'], name);
+  });
+});
+
+describe('names with a domain ending', () => {
+  const name = 'acme.design';
+
+  test('the name’s own ending is checked exactly, the other endings with a hyphen', () => {
+    for (const tld of TLDS) assert.equal(byId[tld].handle(name), tld === 'design' ? 'acme' : 'acme-design', tld);
+    assert.equal(linkFor(byId.design, name), 'https://acme.design');
+    assert.equal(linkFor(byId.com, name), 'https://acme-design.com');
+  });
+
+  test('social platforms keep the dot where usernames allow it and otherwise use their separator', () => {
+    const handles = Object.fromEntries(PLATFORMS.filter((p) => p.group === 'social').map((p) => [p.id, p.handle(name)]));
+    assert.deepEqual(handles, {
+      instagram: 'acme.design',
+      threads: 'acme.design',
+      tiktok: 'acme.design',
+      youtube: 'acme.design',
+      linkedin: 'acme.design',
+      bluesky: 'acme.design',
+      x: 'acme_design',
+      reddit: 'acme_design',
+      pinterest: 'acme_design',
+      twitch: 'acme_design',
+      telegram: 'acme_design',
+      mastodon: 'acme_design',
+      hackernews: 'acme_design',
+      github: 'acme-design',
+      discord: 'acme-design',
+      tumblr: 'acme-design',
+      substack: 'acme-design',
+      facebook: 'acmedesign',
+    });
+  });
+
+  test('results link to the address that is checked', () => {
+    assert.equal(linkFor(byId.instagram, name), 'https://www.instagram.com/acme.design');
+    assert.equal(linkFor(byId.youtube, name), 'https://www.youtube.com/@acme.design');
+    assert.equal(linkFor(byId.x, name), 'https://x.com/acme_design');
+    assert.equal(linkFor(byId.facebook, name), 'https://www.facebook.com/acmedesign');
+    assert.equal(linkFor(byId.bluesky, name), 'https://bsky.app/profile/acme.design');
+    assert.equal(linkFor(byId.substack, name), 'https://acme-design.substack.com');
+  });
+
+  test('lookups use the name as each platform needs it', async () => {
+    const fetch = mockFetch([]);
+    await checkAll(name, { fetch });
+    const urls = fetch.calls.map(({ url }) => url);
+    for (const expected of [
+      'https://rdap.nic.design/domain/acme.design',
+      'https://rdap.verisign.com/com/v1/domain/acme-design.com',
+      'https://publish.x.com/oembed?url=https://x.com/acme_design',
+      'https://api.github.com/users/acme-design',
+      'https://unavatar.io/youtube/acme.design?',
+      'https://graph.facebook.com/acmedesign/picture',
+      'https://r.jina.ai/https://www.linkedin.com/company/acme.design',
+      'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=acme.design',
+    ]) {
+      assert.ok(urls.some((url) => url.startsWith(expected)), `${expected} was not requested`);
+    }
+  });
+
+  test('a dotted name is allowed everywhere once adapted', async () => {
+    assert.deepEqual(await invalidFor(name), []);
+  });
+
+  test('every dot is adapted, and a name without a known ending gets hyphenated domains', () => {
+    assert.equal(linkFor(byId.design, 'acme.rocket.design'), 'https://acme-rocket.design');
+    assert.equal(linkFor(byId.com, 'acme.rocket.design'), 'https://acme-rocket-design.com');
+    assert.equal(linkFor(byId.github, 'acme.rocket.design'), 'https://github.com/acme-rocket-design');
+    assert.equal(linkFor(byId.bluesky, 'acme.rocket.design'), 'https://bsky.app/profile/acme-rocket.design');
+    assert.equal(linkFor(byId.com, 'deno.land'), 'https://deno-land.com');
+    assert.equal(linkFor(byId.tiktok, 'deno.land'), 'https://www.tiktok.com/@deno.land');
+    assert.equal(linkFor(byId.bluesky, 'deno.land'), 'https://bsky.app/profile/deno-land.bsky.social');
+  });
+
+  test('names without dots are used as typed', () => {
+    for (const p of PLATFORMS) {
+      assert.equal(p.handle('acme_rocket-1'), p.id === 'bluesky' ? 'acme_rocket-1.bsky.social' : 'acme_rocket-1', p.id);
+    }
   });
 });
 
@@ -441,6 +558,18 @@ describe('Bluesky', () => {
   test('a handle that does not resolve means available', async () => {
     const r = await check('bluesky', 'acme', [[profile, notFound], [resolve, json(400, { error: 'InvalidRequest', message: 'Unable to resolve handle' })]]);
     assert.equal(r.status, STATUS.AVAILABLE);
+    assert.equal(r.note, 'Nobody uses acme.bsky.social');
+  });
+
+  test('a name with a domain ending is checked as that domain', async () => {
+    const domainProfile = `${api}app.bsky.actor.getProfile?actor=acme.design`;
+    const domainResolve = `${api}com.atproto.identity.resolveHandle?handle=acme.design`;
+    const taken = await check('bluesky', 'acme.design', [[domainProfile, json(200, { did: 'did:plc:abc', handle: 'acme.design', displayName: 'Acme' })]]);
+    assert.equal(taken.status, STATUS.TAKEN);
+    assert.equal(taken.note, 'Account: Acme');
+    const free = await check('bluesky', 'acme.design', [[domainProfile, notFound], [domainResolve, json(400, { error: 'InvalidRequest', message: 'Unable to resolve handle' })]]);
+    assert.equal(free.status, STATUS.AVAILABLE);
+    assert.equal(free.note, 'Nobody uses acme.design — it’s yours if you own the domain');
   });
 
   test('a resolving handle without a profile (e.g. deactivated) is taken', async () => {

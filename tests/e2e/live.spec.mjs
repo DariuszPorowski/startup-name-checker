@@ -55,6 +55,23 @@ test('a random name is reported as available', async ({ page }) => {
   }
 });
 
+test('a name with a domain ending is checked as that domain and adapted for each platform', async ({ page }) => {
+  // booking.com is the domain itself, booking_com on X, booking-com on GitHub, booking.com on TikTok and LinkedIn, and
+  // bookingcom on Facebook. All of them exist.
+  const rows = await checkName(page, 'booking.com', 'domains=com&social=x,github,tiktok,facebook,linkedin');
+  for (const id of ['com', 'x']) expect(rows[id].status, id).toBe('taken');
+  if (!rateLimited(rows.github)) expect(rows.github.status, 'github').toBe('taken');
+  for (const id of ['tiktok', 'facebook', 'linkedin']) expect(['taken', 'unknown', 'manual'], id).toContain(rows[id].status);
+});
+
+test('bluesky checks a name with a domain ending as that domain', async ({ page }) => {
+  // GitHub uses its domain as its Bluesky handle.
+  const taken = await checkName(page, 'github.com', 'domains=com&social=bluesky');
+  expect(taken.bluesky.status).toBe('taken');
+  const free = await checkName(page, `zq${Date.now().toString(36)}x.design`, 'domains=design&social=bluesky');
+  expect(free.bluesky.status).toBe('available');
+});
+
 // Accounts that are known to exist, one per newer platform.
 const KNOWN = {
   bluesky: 'google',

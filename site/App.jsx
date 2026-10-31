@@ -19,7 +19,7 @@ import {
   UnorderedList,
 } from '@primer/react-brand/esm';
 import { DeviceDesktopIcon, GlobeIcon, MarkGithubIcon, MoonIcon, SearchIcon, SunIcon, SyncIcon } from '@primer/octicons-react';
-import { checkAll, normalizeName, validateInput, PLATFORMS, STATUS, STATUS_LABEL, TLDS } from './checker.js';
+import { checkAll, domainEnding, linkFor, normalizeName, validateInput, PLATFORMS, STATUS, STATUS_LABEL, TLDS } from './checker.js';
 import { BRAND_ICONS, EVEN_ODD_ICONS } from './icons.js';
 
 const REPO_URL = 'https://github.com/DariuszPorowski/startup-name-checker';
@@ -207,7 +207,7 @@ function Picker({ group, selected, onToggle, onSetGroup }) {
 // ---------------------------------------------------------------- results
 
 function ResultRow({ platform, name, result, onRetry }) {
-  const url = platform.url(name);
+  const url = linkFor(platform, name);
   const { status } = result;
   const avatar = typeof result.avatar === 'string' && result.avatar.startsWith('https://') ? result.avatar : null;
   return (
@@ -284,7 +284,8 @@ function Results({ run, rows, results, onRetry }) {
         </Text>
       </div>
       {GROUPS.map((group) => {
-        const groupRows = rows.filter((p) => p.group === group.id);
+        // A name like "acme.design" puts that exact domain first; the other endings check acme-design.com and so on.
+        const groupRows = rows.filter((p) => p.group === group.id).sort((a, b) => (b.id === run.ending) - (a.id === run.ending));
         if (!groupRows.length) return null;
         return (
           <div key={group.id} className="result-group">
@@ -341,7 +342,8 @@ function About() {
             </UnorderedList.Item>
             <UnorderedList.Item>
               <strong>Bluesky, Reddit, Pinterest, Discord, Mastodon, Tumblr, Hacker News</strong> — their public APIs.{' '}
-              <strong>Twitch</strong> — ivr.fi. Bluesky checks <InlineCode>NAME.bsky.social</InlineCode>, Mastodon checks
+              <strong>Twitch</strong> — ivr.fi. Bluesky checks <InlineCode>NAME.bsky.social</InlineCode> (or the domain
+              itself, for a name like <InlineCode>acme.design</InlineCode>), Mastodon checks
               mastodon.social and Discord checks custom invite links (<InlineCode>discord.gg/NAME</InlineCode>). Reddit
               blocks some networks, such as VPNs — then open the link.
             </UnorderedList.Item>
@@ -384,6 +386,25 @@ function About() {
             Tick the domain endings and platforms under the search box — .com and the eight biggest social networks are
             picked until you change it. Your choice is kept in the page address, so you can bookmark or share it. Use the
             refresh button on a result to check just that one again.
+          </p>
+        </FAQ.Answer>
+      </FAQ.Item>
+      <FAQ.Item>
+        <FAQ.Question as="h3">Can the name include a domain ending, like acme.design?</FAQ.Question>
+        <FAQ.Answer>
+          <p>
+            Yes. <InlineCode>acme.design</InlineCode> is checked as that exact domain (its ending is ticked for you), and the
+            other endings as <InlineCode>acme-design.com</InlineCode>, <InlineCode>acme-design.io</InlineCode> and so on. Any
+            other dots become hyphens too, so <InlineCode>acme.rocket.design</InlineCode> checks{' '}
+            <InlineCode>acme-rocket.design</InlineCode>.
+          </p>
+          <p>
+            On social platforms the dot stays wherever usernames allow it — Instagram, Threads, TikTok, YouTube and
+            LinkedIn. Bluesky handles are domain names, so Bluesky checks <InlineCode>acme.design</InlineCode> itself, which
+            whoever owns the domain can use. Elsewhere the dot becomes the separator the platform uses: an underscore on X,
+            Reddit, Pinterest, Twitch, Telegram, Mastodon and Hacker News, and a hyphen on GitHub, Discord, Tumblr and
+            Substack. Facebook ignores periods in usernames, so there it’s left out (<InlineCode>acmedesign</InlineCode>).
+            Each result links to the exact address that was checked.
           </p>
         </FAQ.Answer>
       </FAQ.Item>
@@ -450,14 +471,18 @@ export default function App() {
       inputRef.current?.focus();
       return;
     }
-    const platforms = PLATFORMS.filter((p) => selected.has(p.id));
+    // A name like "acme.design" is checked as that exact domain, so its ending gets ticked.
+    const ending = domainEnding(clean);
+    const picked = ending && !selected.has(ending) ? new Set(selected).add(ending) : selected;
+    const platforms = PLATFORMS.filter((p) => picked.has(p.id));
     if (!platforms.length) {
       setError({ message: NOTHING_SELECTED, badInput: false });
       return;
     }
+    if (picked !== selected) setSelected(picked);
     setError(null);
     setName(clean);
-    const current = { name: clean, attempts: new Map() };
+    const current = { name: clean, ending, attempts: new Map() };
     runRef.current = current;
     setRun(current);
     setResults(new Map());
@@ -590,8 +615,9 @@ export default function App() {
                 leadingVisual={<SearchIcon />}
               />
               <FormControl.Hint>
-                Letters, numbers, dots, hyphens and underscores. Spaces, <InlineCode>@</InlineCode> and a trailing domain
-                ending like <InlineCode>.com</InlineCode> are removed.
+                Letters, numbers, dots, hyphens and underscores. A name like <InlineCode>acme.design</InlineCode> checks that
+                exact domain — elsewhere the dot becomes what each platform allows, like <InlineCode>acme-design.com</InlineCode>{' '}
+                or <InlineCode>@acme_design</InlineCode>.
               </FormControl.Hint>
               {badInput && <FormControl.Validation role="alert">{error.message}</FormControl.Validation>}
             </FormControl>

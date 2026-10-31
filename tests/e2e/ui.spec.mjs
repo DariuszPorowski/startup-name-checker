@@ -137,7 +137,7 @@ test('checks a name against the default selection', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: 'Instagram' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Bluesky' })).not.toBeChecked();
 
-  await page.getByRole('textbox', { name: 'Startup name' }).fill('  @AcmeRocket.com ');
+  await page.getByRole('textbox', { name: 'Startup name' }).fill('  @AcmeRocket ');
   await checkButton(page).click();
 
   await expect(page).toHaveURL(/\?name=acmerocket$/);
@@ -301,7 +301,7 @@ test('rejects unusable input without making requests', async ({ page }) => {
 test('marks platforms whose username rules the name breaks', async ({ page }) => {
   await mockServices(page, []);
   await page.goto('./?name=acme_rocket');
-  for (const id of ['com', 'github', 'facebook', 'linkedin']) {
+  for (const id of ['com', 'github', 'facebook']) {
     await expect(row(page, id), id).toHaveAttribute('data-status', 'invalid');
   }
   await expect(row(page, 'com')).toContainText('Domains allow letters, numbers and hyphens');
@@ -309,6 +309,90 @@ test('marks platforms whose username rules the name breaks', async ({ page }) =>
   // Everything else fails (no mocks), which must surface as "unknown" or a manual check — never a guess.
   await settled(page);
   await expect(page.locator('.row[data-status="available"], .row[data-status="taken"]')).toHaveCount(0);
+});
+
+test('a name with a domain ending checks that exact domain and adapts the dot everywhere else', async ({ page }) => {
+  const problems = watchProblems(page);
+  const requests = await mockServices(page, [
+    ['https://rdap.nic.design/domain/acme.design', registered('2022-04-12')],
+    ['https://rdap.verisign.com/com/v1/domain/acme-design.com', json(404, {})],
+    ['https://rdap.identitydigital.services/rdap/domain/acme-design.io', json(404, {})],
+    ['https://r.jina.ai/https://www.threads.com/@acme.design', jina({ title: 'Acme (@acme.design) • Threads, Say more', finalUrl: 'https://www.threads.com/@acme.design' })],
+    ['https://publish.x.com/oembed?url=https://x.com/acme_design', json(200, { url: 'https://x.com/Acme_Design' })],
+    ['https://api.github.com/users/acme-design', json(404, { message: 'Not Found' })],
+    ['https://unavatar.io/youtube/acme.design', json(404, {})],
+    ['https://r.jina.ai/https://www.tiktok.com/@acme.design', jina({ title: 'Couldn’t find this account. Visit TikTok to discover more trending creators.' })],
+    ['https://graph.facebook.com/acmedesign/picture', json(400, { error: { code: 100, message: 'Unsupported get request.' } })],
+    ['https://r.jina.ai/https://www.linkedin.com/company/acme.design', jina({ title: 'LinkedIn', warning: 'Target URL returned error 404: Not Found' })],
+  ]);
+  await page.goto('./');
+  await page.getByRole('textbox', { name: 'Startup name' }).fill('Acme.Design');
+  await checkButton(page).click();
+
+  await expect(page).toHaveURL(/\?name=acme\.design&domains=com,design$/);
+  await expect(page.getByRole('heading', { name: 'Results for acme.design' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: '.design' })).toBeChecked();
+  expect(await rowIds(page, '#list-domains .row')).toEqual(['design', 'com']);
+  const expected = {
+    design: ['taken', 'acme.design', 'https://acme.design'],
+    com: ['available', 'acme-design.com', 'https://acme-design.com'],
+    instagram: ['taken', 'instagram.com/acme.design', 'https://www.instagram.com/acme.design'],
+    x: ['taken', 'x.com/acme_design', 'https://x.com/acme_design'],
+    github: ['available', 'github.com/acme-design', 'https://github.com/acme-design'],
+    youtube: ['available', 'youtube.com/@acme.design', 'https://www.youtube.com/@acme.design'],
+    tiktok: ['available', 'tiktok.com/@acme.design', 'https://www.tiktok.com/@acme.design'],
+    threads: ['taken', 'threads.com/@acme.design', 'https://www.threads.com/@acme.design'],
+    facebook: ['likely', 'facebook.com/acmedesign', 'https://www.facebook.com/acmedesign'],
+    linkedin: ['available', 'linkedin.com/company/acme.design', 'https://www.linkedin.com/company/acme.design'],
+  };
+  for (const [id, [status, text, href]] of Object.entries(expected)) {
+    await expect(row(page, id), id).toHaveAttribute('data-status', status);
+    await expect(row(page, id).getByRole('link'), id).toHaveText(text);
+    await expect(row(page, id).getByRole('link'), id).toHaveAttribute('href', href);
+  }
+  await expect(row(page, 'design')).toContainText('Registered since 2022-04-12');
+  await expect(row(page, 'x')).toContainText('@Acme_Design');
+  await expect(page.locator('#summary')).toHaveText('5 available · 1 likely available · 4 taken');
+
+  // Endings ticked later are checked with the hyphen too, after the name's own ending.
+  await clickLabel(page, '.io');
+  await expect(row(page, 'io')).toHaveAttribute('data-status', 'available');
+  await expect(row(page, 'io').getByRole('link')).toHaveAttribute('href', 'https://acme-design.io');
+  expect(await rowIds(page, '#list-domains .row')).toEqual(['design', 'com', 'io']);
+  expect(requests.filter((url) => /acme\.design\.|users\/acme\.design|acme\.design\.bsky/.test(url))).toEqual([]);
+  expect(problems).toEqual([]);
+});
+
+test('a shared link with a domain ending adapts the name for every domain and platform', async ({ page }) => {
+  await mockServices(page, []);
+  await page.goto(`./?name=acme.design&${ALL}`);
+  await expect(page.locator('.row')).toHaveCount(PLATFORMS.length);
+  await expect(page).toHaveURL(new RegExp(`\\?name=acme\\.design&${ALL}$`));
+  expect(await rowIds(page, '#list-domains .row')).toEqual(['design', ...TLDS.filter((tld) => tld !== 'design')]);
+  const links = await page.locator('.row').evaluateAll((els) => Object.fromEntries(els.map((el) => [el.dataset.platform, el.querySelector('a').getAttribute('href')])));
+  expect(links).toEqual({
+    ...Object.fromEntries(TLDS.map((tld) => [tld, tld === 'design' ? 'https://acme.design' : `https://acme-design.${tld}`])),
+    instagram: 'https://www.instagram.com/acme.design',
+    x: 'https://x.com/acme_design',
+    github: 'https://github.com/acme-design',
+    youtube: 'https://www.youtube.com/@acme.design',
+    tiktok: 'https://www.tiktok.com/@acme.design',
+    threads: 'https://www.threads.com/@acme.design',
+    facebook: 'https://www.facebook.com/acmedesign',
+    linkedin: 'https://www.linkedin.com/company/acme.design',
+    bluesky: 'https://bsky.app/profile/acme.design',
+    reddit: 'https://www.reddit.com/user/acme_design',
+    pinterest: 'https://www.pinterest.com/acme_design/',
+    twitch: 'https://www.twitch.tv/acme_design',
+    discord: 'https://discord.gg/acme-design',
+    telegram: 'https://t.me/acme_design',
+    mastodon: 'https://mastodon.social/@acme_design',
+    tumblr: 'https://www.tumblr.com/acme-design',
+    substack: 'https://acme-design.substack.com',
+    hackernews: 'https://news.ycombinator.com/user?id=acme_design',
+  });
+  await settled(page);
+  await expect(page.locator('.row[data-status="invalid"]')).toHaveCount(0);
 });
 
 test('shows avatars from https sources only', async ({ page }) => {
