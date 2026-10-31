@@ -22,7 +22,10 @@ export const STATUS_LABEL = Object.freeze({
 });
 
 /** Domain endings that can be checked, in display order. */
-export const TLDS = Object.freeze(['com', 'net', 'org', 'app', 'dev', 'io', 'co', 'ai', 'so', 'pro', 'cloud', 'tech', 'xyz']);
+export const TLDS = Object.freeze([
+  'com', 'net', 'org', 'info', 'app', 'dev', 'io', 'co', 'ai', 'so', 'pro', 'cloud', 'tech', 'xyz',
+  'design', 'online', 'shop', 'store',
+]);
 
 const TLD_SUFFIX = new RegExp(`\\.(${TLDS.join('|')})$`);
 
@@ -181,6 +184,7 @@ const failed = (what = 'The lookup failed') => result(STATUS.UNKNOWN, `${what} â
 const RDAP_ORG = { base: 'https://rdap.org/', via: 'rdap.org' };
 const IDENTITY_DIGITAL = { base: 'https://rdap.identitydigital.services/rdap/', via: 'Identity Digital RDAP' };
 const GOOGLE_REGISTRY = { base: 'https://pubapi.registry.google/rdap/', via: 'Google Registry RDAP' };
+const RADIX = { base: 'https://rdap.radix.host/rdap/', via: 'Radix RDAP' };
 
 // Registry RDAP servers from the IANA bootstrap file (https://data.iana.org/rdap/dns.json); all of them send CORS headers.
 // .io isn't listed there, but its registry (Identity Digital) answers anyway. .co and .so have no public RDAP, so only
@@ -189,6 +193,7 @@ const RDAP = {
   com: [{ base: 'https://rdap.verisign.com/com/v1/', via: 'Verisign RDAP' }, RDAP_ORG],
   net: [{ base: 'https://rdap.verisign.com/net/v1/', via: 'Verisign RDAP' }, RDAP_ORG],
   org: [{ base: 'https://rdap.publicinterestregistry.org/rdap/', via: 'Public Interest Registry RDAP' }, RDAP_ORG],
+  info: [IDENTITY_DIGITAL, RDAP_ORG],
   app: [GOOGLE_REGISTRY, RDAP_ORG],
   dev: [GOOGLE_REGISTRY, RDAP_ORG],
   io: [IDENTITY_DIGITAL],
@@ -197,8 +202,13 @@ const RDAP = {
   so: [],
   pro: [IDENTITY_DIGITAL, RDAP_ORG],
   cloud: [{ base: 'https://rdap.registry.cloud/rdap/', via: '.cloud registry RDAP' }, RDAP_ORG],
-  tech: [{ base: 'https://rdap.radix.host/rdap/', via: 'Radix RDAP' }, RDAP_ORG],
+  tech: [RADIX, RDAP_ORG],
   xyz: [{ base: 'https://rdap.centralnic.com/xyz/', via: 'CentralNic RDAP' }, RDAP_ORG],
+  design: [{ base: 'https://rdap.nic.design/', via: '.design registry RDAP' }, RDAP_ORG],
+  online: [RADIX, RDAP_ORG],
+  // GMO answers an unregistered .shop with a 404 titled "Error in processing request"; it still means "not registered".
+  shop: [{ base: 'https://rdap.gmoregistry.net/rdap/', via: 'GMO Registry RDAP' }, RDAP_ORG],
+  store: [RADIX, RDAP_ORG],
 };
 
 async function checkDomain(name, tld, ctx) {

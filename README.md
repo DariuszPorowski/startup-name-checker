@@ -1,6 +1,6 @@
 # Startup Name Checker
 
-Check if a startup name is free as a **.com, .net, .org, .app, .dev, .io, .co, .ai, .so, .pro, .cloud, .tech or .xyz** domain and on **18 social platforms**, all at once: Instagram, X, GitHub, YouTube, TikTok, Threads, Facebook, LinkedIn, Bluesky, Reddit, Pinterest, Twitch, Discord, Telegram, Mastodon, Tumblr, Substack and Hacker News.
+Check if a startup name is free as a **.com, .net, .org, .info, .app, .dev, .io, .co, .ai, .so, .pro, .cloud, .tech, .xyz, .design, .online, .shop or .store** domain and on **18 social platforms**, all at once: Instagram, X, GitHub, YouTube, TikTok, Threads, Facebook, LinkedIn, Bluesky, Reddit, Pinterest, Twitch, Discord, Telegram, Mastodon, Tumblr, Substack and Hacker News.
 
 **▶ Try it: <https://dariusz.porowski.dev/startup-name-checker/>**
 
@@ -24,10 +24,12 @@ It's one static page with no backend, no cookies and no tracking. Your browser d
 | `.com`, `.net` | `https://NAME.com` | [Verisign RDAP](https://rdap.verisign.com/), then [rdap.org](https://rdap.org/), then [Google Public DNS](https://developers.google.com/speed/public-dns/docs/doh/json) |
 | `.org` | `https://NAME.org` | Public Interest Registry RDAP, then rdap.org, then Google Public DNS |
 | `.app`, `.dev` | `https://NAME.app` | [Google Registry RDAP](https://pubapi.registry.google/), then rdap.org, then Google Public DNS |
-| `.io`, `.ai`, `.pro` | `https://NAME.io` | [Identity Digital RDAP](https://www.identity.digital/), then rdap.org (except `.io`), then Google Public DNS |
+| `.info`, `.io`, `.ai`, `.pro` | `https://NAME.io` | [Identity Digital RDAP](https://www.identity.digital/), then rdap.org (except `.io`), then Google Public DNS |
 | `.cloud` | `https://NAME.cloud` | .cloud registry RDAP, then rdap.org, then Google Public DNS |
-| `.tech` | `https://NAME.tech` | Radix RDAP, then rdap.org, then Google Public DNS |
+| `.design` | `https://NAME.design` | .design registry RDAP, then rdap.org, then Google Public DNS |
+| `.tech`, `.online`, `.store` | `https://NAME.tech` | Radix RDAP, then rdap.org, then Google Public DNS |
 | `.xyz` | `https://NAME.xyz` | CentralNic RDAP, then rdap.org, then Google Public DNS |
+| `.shop` | `https://NAME.shop` | GMO Registry RDAP, then rdap.org, then Google Public DNS |
 | `.co`, `.so` | `https://NAME.co` | Google Public DNS only, because these endings have no public registry lookup |
 | Instagram | `https://www.instagram.com/NAME` | Instagram blocks lookups from browsers, so open the link to check. Marked **taken** if the handle has a Threads profile. |
 | X | `https://x.com/NAME` | X oEmbed, then [FxTwitter](https://github.com/FxEmbed/FxEmbed) |
@@ -63,7 +65,7 @@ Each result has one of these statuses:
 - Threads uses Instagram usernames, so a Threads profile means the Instagram handle is taken. If there's no Threads profile, Instagram still needs a manual check.
 - Facebook only exposes public **Pages**. Personal profiles are private, so "no Page found" is shown as **Likely available**.
 - `.co` and `.so` are checked through DNS only, so a domain without DNS records shows as **Likely available**. A registered domain can still have no records.
-- The domain endings are the ones startups pick most: the classics (.com, .net, .org), the tech favourites (.io, .ai, .co, .app, .dev, .so, .tech, .xyz), .cloud and .pro.
+- The domain endings are the ones startups pick most: the classics (.com, .net, .org, .info), the tech favourites (.io, .ai, .co, .app, .dev, .so, .tech, .xyz), the ones for shops and studios (.shop, .store, .online, .design), .cloud and .pro.
 - Bluesky is checked for the default `NAME.bsky.social` handle, and Mastodon only on the mastodon.social server. Discord is checked for a custom invite link (`discord.gg/NAME`), which only boosted servers can set; Discord usernames can't be looked up.
 - Reddit blocks lookups from some networks, such as VPNs and cloud providers. The row then says **Check manually**. Names of deleted Reddit accounts can't be registered again.
 - Telegram shows the same page for free, reserved and auctioned usernames, so a name nobody uses is **Likely available**. The Hacker News API is case-sensitive, so "no user" is **Likely available** too.
