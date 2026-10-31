@@ -27,9 +27,9 @@ export const TLDS = Object.freeze([
   'design', 'online', 'shop', 'store',
 ]);
 
-const TLD_SUFFIX = new RegExp(`\\.(${TLDS.join('|')})$`);
+const TLD_SUFFIX = new RegExp(`.\\.(${TLDS.join('|')})$`);
 
-/** Turns user input like " @My Startup ", "https://www.mystartup.com/" into "mystartup". */
+/** Turns user input like " @My Startup ", "https://www.mystartup.design/" into "mystartup", "mystartup.design". */
 export function normalizeName(input) {
   return String(input ?? '')
     .trim()
@@ -39,89 +39,127 @@ export function normalizeName(input) {
     .replace(/\/+$/, '')
     .replace(/^@+/, '')
     .replace(/\s+/g, '')
-    .replace(TLD_SUFFIX, '');
+    .replace(/\.{2,}/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+}
+
+/** The domain ending of a name like "acme.design" when it's one that can be checked, otherwise null. */
+export function domainEnding(name) {
+  const m = TLD_SUFFIX.exec(name);
+  return m ? m[1] : null;
 }
 
 /** Returns an error message for unusable input, or null when the name can be checked. */
 export function validateInput(name) {
   if (!name) return 'Enter a name to check.';
-  if (name.length > 63) return 'Keep the name to 63 characters or fewer.';
+  // A domain ending doesn't count, so the longest domain names (63 characters before the ending) still fit.
+  const ending = domainEnding(name);
+  if (name.length - (ending ? ending.length + 1 : 0) > 63) {
+    return ending ? `Keep the name before .${ending} to 63 characters or fewer.` : 'Keep the name to 63 characters or fewer.';
+  }
   if (!/^[a-z0-9._-]+$/.test(name)) return 'Use only letters, numbers, dots, hyphens and underscores.';
   return null;
 }
 
 const noEdgeDots = (n) => !n.startsWith('.') && !n.endsWith('.') && !n.includes('..');
 
+// `dot` is what a "." in the name becomes on each platform. It stays where usernames allow periods (as in acme.design)
+// and otherwise becomes the separator the platform allows: "_" for handles, "-" for names that are part of a web
+// address. Reddit and Hacker News allow both and get "_" like most handles. Facebook ignores periods in usernames and
+// rejects domain endings, so there the dot is dropped. Bluesky handles are domain names, so a name with a domain ending
+// is checked there as that domain (see `blueskyHandle`).
 const RULES = {
   domain: {
+    dot: '-',
     test: (n) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(n) && n.slice(2, 4) !== '--',
     hint: 'Domains allow letters, numbers and hyphens (not at the start or end).',
   },
   instagram: {
+    dot: '.',
     test: (n) => /^[a-z0-9._]{1,30}$/.test(n) && noEdgeDots(n),
     hint: 'Instagram allows up to 30 letters, numbers, periods and underscores (no leading, trailing or double periods).',
   },
   x: {
+    dot: '_',
     test: (n) => /^[a-z0-9_]{1,15}$/.test(n) && !/twitter|admin/.test(n),
     hint: 'X allows up to 15 letters, numbers and underscores, without “twitter” or “admin”.',
   },
   github: {
+    dot: '-',
     test: (n) => /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/.test(n),
     hint: 'GitHub allows up to 39 letters, numbers and single hyphens (not at the start or end).',
   },
   youtube: {
+    dot: '.',
     test: (n) => /^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/.test(n),
     hint: 'YouTube handles are 3–30 letters, numbers, periods, hyphens or underscores, starting and ending with a letter or number.',
   },
   tiktok: {
+    dot: '.',
     test: (n) => /^[a-z0-9._]{2,24}$/.test(n) && !n.endsWith('.'),
     hint: 'TikTok allows 2–24 letters, numbers, periods and underscores (not ending with a period).',
   },
   facebook: {
+    dot: '',
     test: (n) => /^[a-z0-9.]{5,50}$/.test(n) && noEdgeDots(n) && !/^\d+$/.test(n),
     hint: 'Facebook usernames are 5–50 letters, numbers or periods (not only numbers).',
   },
   linkedin: {
-    test: (n) => /^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/.test(n) && n.length >= 2 && !n.includes('linkedin'),
-    hint: 'LinkedIn company URLs allow 2–100 letters, numbers and hyphens (not at the start or end).',
+    dot: '.',
+    test: (n) => /^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$/.test(n) && n.length >= 2 && !n.includes('linkedin'),
+    hint: 'LinkedIn company URLs allow 2–100 letters, numbers, periods, hyphens and underscores, starting and ending with a letter or number.',
   },
   bluesky: {
-    test: (n) => /^[a-z0-9][a-z0-9-]{1,16}[a-z0-9]$/.test(n),
-    hint: 'Bluesky handles (NAME.bsky.social) allow 3–18 letters, numbers and hyphens (not at the start or end).',
+    dot: '-',
+    // Checks the whole handle: NAME.bsky.social, or a domain like acme.design.
+    test: (h) =>
+      h.endsWith('.bsky.social')
+        ? /^[a-z0-9][a-z0-9-]{1,16}[a-z0-9]\.bsky\.social$/.test(h)
+        : RULES.domain.test(h.slice(0, h.lastIndexOf('.'))),
+    hint: 'Bluesky handles are NAME.bsky.social, with 3–18 letters, numbers and hyphens (not at the start or end), or a domain name.',
   },
   reddit: {
+    dot: '_',
     test: (n) => /^[a-z0-9_-]{3,20}$/.test(n),
     hint: 'Reddit usernames are 3–20 letters, numbers, hyphens and underscores.',
   },
   pinterest: {
+    dot: '_',
     test: (n) => /^[a-z0-9_]{3,30}$/.test(n),
     hint: 'Pinterest usernames are 3–30 letters, numbers and underscores.',
   },
   twitch: {
+    dot: '_',
     test: (n) => /^[a-z0-9][a-z0-9_]{3,24}$/.test(n),
     hint: 'Twitch usernames are 4–25 letters, numbers and underscores (not starting with an underscore).',
   },
   discord: {
+    dot: '-',
     test: (n) => /^[a-z0-9-]{2,32}$/.test(n),
     hint: 'Discord invite links allow 2–32 letters, numbers and hyphens.',
   },
   telegram: {
+    dot: '_',
     test: (n) => /^[a-z][a-z0-9_]{3,30}[a-z0-9]$/.test(n),
     hint: 'Telegram usernames are 5–32 letters, numbers and underscores, starting with a letter.',
   },
   mastodon: {
+    dot: '_',
     test: (n) => /^[a-z0-9_]{1,30}$/.test(n),
     hint: 'Mastodon usernames allow up to 30 letters, numbers and underscores.',
   },
   tumblr: {
+    dot: '-',
     test: (n) => /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(n),
     hint: 'Tumblr blog names allow up to 32 letters, numbers and hyphens (not at the start or end).',
   },
   substack: {
+    dot: '-',
     test: (n) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(n),
     hint: 'Substack addresses allow letters, numbers and hyphens (not at the start or end).',
   },
   hackernews: {
+    dot: '_',
     test: (n) => /^[a-z0-9_-]{2,15}$/.test(n),
     hint: 'Hacker News usernames are 2–15 letters, numbers, hyphens and underscores.',
   },
@@ -354,9 +392,8 @@ async function checkLinkedIn(name, ctx) {
   return failed('LinkedIn did not answer');
 }
 
-async function checkBluesky(name, ctx) {
+async function checkBluesky(handle, ctx) {
   const via = 'Bluesky API';
-  const handle = `${name}.bsky.social`;
   const api = 'https://public.api.bsky.app/xrpc/';
   const profile = await get(ctx, `${api}app.bsky.actor.getProfile?actor=${handle}`);
   if (profile.ok && profile.body && profile.body.did) {
@@ -366,7 +403,9 @@ async function checkBluesky(name, ctx) {
   const r = await get(ctx, `${api}com.atproto.identity.resolveHandle?handle=${handle}`);
   if (r.ok && r.body && r.body.did) return result(STATUS.TAKEN, 'Handle in use (no public profile)', { via });
   if (r.status === 400 && r.body && /unable to resolve handle/i.test(String(r.body.message || ''))) {
-    return result(STATUS.AVAILABLE, `Nobody uses ${handle}`, { via });
+    // Only the owner of a domain can use it as a handle.
+    const note = handle.endsWith('.bsky.social') ? `Nobody uses ${handle}` : `Nobody uses ${handle} — it’s yours if you own the domain`;
+    return result(STATUS.AVAILABLE, note, { via });
   }
   return failed();
 }
@@ -480,6 +519,18 @@ async function checkHackerNews(name, ctx) {
 
 // ---------------------------------------------------------------- registry
 
+// `handle(name)` is the name as the platform needs it; `rule`, `url` and `check` all work with that handle.
+
+// "acme.design" is acme.design itself on .design, and acme-design.com, acme-design.io and so on on the other endings.
+const domainLabel = (n, tld) => (domainEnding(n) === tld ? n.slice(0, -tld.length - 1) : n).replace(/\./g, RULES.domain.dot);
+
+// Bluesky handles are domain names. A name with a domain ending is checked as that domain, which its owner can use as
+// their handle; any other name as NAME.bsky.social.
+const blueskyHandle = (n) => {
+  const tld = domainEnding(n);
+  return tld ? `${domainLabel(n, tld)}.${tld}` : `${n.replace(/\./g, RULES.bluesky.dot)}.bsky.social`;
+};
+
 const domain = (tld) => ({
   id: tld,
   group: 'domains',
@@ -487,12 +538,21 @@ const domain = (tld) => ({
   icon: 'domain',
   rule: RULES.domain,
   defaultChecked: tld === 'com',
-  url: (n) => `https://${n}.${tld}`,
-  check: (n, ctx) => checkDomain(n, tld, ctx),
+  handle: (n) => domainLabel(n, tld),
+  url: (h) => `https://${h}.${tld}`,
+  check: (h, ctx) => checkDomain(h, tld, ctx),
 });
 
-const social = (id, label, check, url, { rule = RULES[id], icon = id, defaultChecked = false } = {}) => ({
-  id, group: 'social', label, icon, rule, defaultChecked, url, check,
+const social = (id, label, check, url, { rule = RULES[id], icon = id, defaultChecked = false, handle } = {}) => ({
+  id,
+  group: 'social',
+  label,
+  icon,
+  rule,
+  defaultChecked,
+  handle: handle || ((n) => n.replace(/\./g, rule.dot)),
+  url,
+  check,
 });
 
 /** Everything that can be checked, in display order. `defaultChecked` marks what's selected until the user changes it. */
@@ -506,7 +566,7 @@ export const PLATFORMS = [
   social('threads', 'Threads', checkThreads, (n) => `https://www.threads.com/@${n}`, { rule: RULES.instagram, defaultChecked: true }),
   social('facebook', 'Facebook', checkFacebook, (n) => `https://www.facebook.com/${n}`, { defaultChecked: true }),
   social('linkedin', 'LinkedIn', checkLinkedIn, (n) => `https://www.linkedin.com/company/${n}`, { defaultChecked: true }),
-  social('bluesky', 'Bluesky', checkBluesky, (n) => `https://bsky.app/profile/${n}.bsky.social`),
+  social('bluesky', 'Bluesky', checkBluesky, (h) => `https://bsky.app/profile/${h}`, { handle: blueskyHandle }),
   social('reddit', 'Reddit', checkReddit, (n) => `https://www.reddit.com/user/${n}`),
   social('pinterest', 'Pinterest', checkPinterest, (n) => `https://www.pinterest.com/${n}/`),
   social('twitch', 'Twitch', checkTwitch, (n) => `https://www.twitch.tv/${n}`),
@@ -517,6 +577,9 @@ export const PLATFORMS = [
   social('substack', 'Substack', checkSubstack, (n) => `https://${n}.substack.com`),
   social('hackernews', 'Hacker News', checkHackerNews, (n) => `https://news.ycombinator.com/user?id=${n}`),
 ];
+
+/** The address a platform's result links to: the name as that platform needs it (see `handle`). */
+export const linkFor = (platform, name) => platform.url(platform.handle ? platform.handle(name) : name);
 
 /**
  * Runs the checks for `platforms` (default: all) in parallel. `onResult(id, result)` fires as each one settles.
@@ -532,9 +595,10 @@ export async function checkAll(name, { fetch: fetchImpl, onResult = () => {}, pl
   const dependsOn = (id) => (settled.has(id) ? settled.get(id).promise : Promise.resolve(null));
 
   const run = async (p) => {
-    if (p.rule && !p.rule.test(name)) return result(STATUS.INVALID, p.rule.hint);
+    const handle = p.handle ? p.handle(name) : name;
+    if (p.rule && !p.rule.test(handle)) return result(STATUS.INVALID, p.rule.hint);
     try {
-      return await p.check(name, ctx, dependsOn);
+      return await p.check(handle, ctx, dependsOn);
     } catch {
       return failed();
     }

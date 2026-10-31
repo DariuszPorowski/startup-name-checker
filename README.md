@@ -7,6 +7,7 @@ Check if a startup name is free as a **.com, .net, .org, .info, .app, .dev, .io,
 It's one static page with no backend, no cookies and no tracking. Your browser does every lookup itself, against public endpoints that allow cross-origin requests. The interface is built with [Primer Brand](https://github.com/primer/brand), GitHub's design system for its marketing sites.
 
 - **Pick what to check** with the checkboxes under the search box. By default it checks **.com** and the eight platforms from Instagram to LinkedIn.
+- **Include a domain ending** in the name, like `acme.design`, to check that exact domain. Its ending is ticked for you, and the other endings are checked as `acme-design.com`, `acme-design.io` and so on. On social platforms the dot stays wherever usernames allow it (Instagram, Threads, TikTok, YouTube and LinkedIn), and Bluesky, where handles are domain names, checks `acme.design` itself. Elsewhere the dot becomes the separator the platform uses: an underscore on X, Reddit, Pinterest, Twitch, Telegram, Mastodon and Hacker News (`acme_design`), and a hyphen on GitHub, Discord, Tumblr and Substack (`acme-design`). Facebook ignores periods in usernames, so there the dot is left out (`acmedesign`). Each result links to the exact address that was checked.
 - **Retry one result** with its ↻ button. Only that lookup runs again, so the other results stay as they are.
 - **Share a result** with the page address. `name` is the name; `domains` and `social` list what to check, separated by commas. For example, <https://dariusz.porowski.dev/startup-name-checker/?name=acmerocket&domains=com,io,ai&social=x,github,bluesky>. Leave out `domains` or `social` to use the defaults, or leave one empty (`domains=`) to check none.
 - **Light or dark**: the page follows your system setting. Pick **Light** or **Dark** from the theme menu in the top-right corner to override it. That choice is saved in your browser; pick **System** to go back.
@@ -18,6 +19,8 @@ It's one static page with no backend, no cookies and no tracking. Your browser d
 </picture>
 
 ## What it checks
+
+`NAME` is the name you check, with any dot adapted for each place as described above.
 
 | Place | Link | How it's checked |
 | --- | --- | --- |
@@ -39,7 +42,7 @@ It's one static page with no backend, no cookies and no tracking. Your browser d
 | Threads | `https://www.threads.com/@NAME` | Jina Reader |
 | Facebook | `https://www.facebook.com/NAME` | Facebook Graph API (public Pages only) |
 | LinkedIn | `https://www.linkedin.com/company/NAME` | Jina Reader, then [Microlink](https://microlink.io) |
-| Bluesky | `https://bsky.app/profile/NAME.bsky.social` | [Bluesky public API](https://docs.bsky.app/docs/advanced-guides/api-directory) |
+| Bluesky | `https://bsky.app/profile/NAME.bsky.social`, or `https://bsky.app/profile/acme.design` for a name with a domain ending | [Bluesky public API](https://docs.bsky.app/docs/advanced-guides/api-directory) |
 | Reddit | `https://www.reddit.com/user/NAME` | Reddit's username check and profile API |
 | Pinterest | `https://www.pinterest.com/NAME/` | Pinterest widget API |
 | Twitch | `https://www.twitch.tv/NAME` | [ivr.fi](https://api.ivr.fi/v2/docs), a public Twitch lookup API |
@@ -66,7 +69,8 @@ Each result has one of these statuses:
 - Facebook only exposes public **Pages**. Personal profiles are private, so "no Page found" is shown as **Likely available**.
 - `.co` and `.so` are checked through DNS only, so a domain without DNS records shows as **Likely available**. A registered domain can still have no records.
 - The domain endings are the ones startups pick most: the classics (.com, .net, .org, .info), the tech favourites (.io, .ai, .co, .app, .dev, .so, .tech, .xyz), the ones for shops and studios (.shop, .store, .online, .design), .cloud and .pro.
-- Bluesky is checked for the default `NAME.bsky.social` handle, and Mastodon only on the mastodon.social server. Discord is checked for a custom invite link (`discord.gg/NAME`), which only boosted servers can set; Discord usernames can't be looked up.
+- Bluesky is checked for the default `NAME.bsky.social` handle. A name with a domain ending, like `acme.design`, is checked as that domain instead, because Bluesky lets a domain's owner use it as their handle. Mastodon is checked only on the mastodon.social server. Discord is checked for a custom invite link (`discord.gg/NAME`), which only boosted servers can set; Discord usernames can't be looked up.
+- A name with more than one dot keeps its ending, and its other dots become hyphens in domains: `acme.rocket.design` is checked as `acme-rocket.design`, and as `acme-rocket-design.com` on the other endings.
 - Reddit blocks lookups from some networks, such as VPNs and cloud providers. The row then says **Check manually**. Names of deleted Reddit accounts can't be registered again.
 - Telegram shows the same page for free, reserved and auctioned usernames, so a name nobody uses is **Likely available**. The Hacker News API is case-sensitive, so "no user" is **Likely available** too.
 - The free services limit how often each IP can use them: GitHub API 60 lookups/hour, Unavatar 25/day, Jina Reader 20/minute, Microlink 5/day. Pinterest limits lookups too. When a limit is hit, that row shows **Unknown**; use its ↻ button to try again later.
