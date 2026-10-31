@@ -2,7 +2,7 @@
   "name": "startup-name-checker",
   "version": "1.0.0",
   "private": true,
-  "description": "Check if a startup name is free as a .com/.app domain and on major social platforms — a static, browser-only page.",
+  "description": "Check if a startup name is free as a domain (.com, .net, .app, .io, .co, .ai, .pro) and on 18 social platforms — a static, browser-only page.",
   "license": "MIT",
   "type": "module",
   "scripts": {

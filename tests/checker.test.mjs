@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkAll, normalizeName, validateInput, PLATFORMS, STATUS } from '../site/checker.js';
+import { checkAll, normalizeName, validateInput, PLATFORMS, STATUS, TLDS } from '../site/checker.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const html = (status) => new Response('<!doctype html><title>x</title>', { status, headers: { 'content-type': 'text/html' } });
@@ -41,7 +41,10 @@ describe('normalizeName', () => {
     ['acme.com', 'acme'],
     ['acme.app', 'acme'],
     ['https://www.acme.com/', 'acme'],
-    ['acme.io', 'acme.io'],
+    ['acme.io', 'acme'],
+    ['https://acme.ai', 'acme'],
+    ['acme.com.co', 'acme.com'],
+    ['acme.dev', 'acme.dev'],
     [undefined, ''],
   ]) {
     test(`${JSON.stringify(input)} -> ${JSON.stringify(expected)}`, () => assert.equal(normalizeName(input), expected));
@@ -56,30 +59,57 @@ describe('validateInput', () => {
 });
 
 describe('platform rules', () => {
-  const invalidFor = async (name) => {
-    const out = await checkAll(name, { fetch: mockFetch([]), platforms: PLATFORMS.filter((p) => p.id !== 'instagram') });
+  const invalidFor = async (name, ids = PLATFORMS.map((p) => p.id)) => {
+    const out = await checkAll(name, { fetch: mockFetch([]), platforms: PLATFORMS.filter((p) => ids.includes(p.id)) });
     return Object.keys(out).filter((id) => out[id].status === STATUS.INVALID).sort();
   };
 
-  test('underscores are not valid in domains, GitHub, Facebook or LinkedIn', async () => {
-    assert.deepEqual(await invalidFor('acme_rocket'), ['app', 'com', 'facebook', 'github', 'linkedin']);
+  test('underscores are not valid in domains and some platforms', async () => {
+    const expected = [...TLDS, 'bluesky', 'discord', 'facebook', 'github', 'linkedin', 'substack', 'tumblr'].sort();
+    assert.deepEqual(await invalidFor('acme_rocket'), expected);
   });
 
-  test('hyphens are only valid for domains, GitHub, YouTube and LinkedIn', async () => {
-    assert.deepEqual(await invalidFor('acme-rocket'), ['facebook', 'threads', 'tiktok', 'x']);
+  test('hyphens are not valid on platforms that only allow letters, numbers, periods or underscores', async () => {
+    const expected = ['facebook', 'instagram', 'mastodon', 'pinterest', 'telegram', 'threads', 'tiktok', 'twitch', 'x'];
+    assert.deepEqual(await invalidFor('acme-rocket'), expected);
   });
 
-  test('X handles are limited to 15 characters', async () => {
-    assert.ok((await invalidFor('acmerocketlaunch')).includes('x'));
+  test('X and Hacker News handles are limited to 15 characters', async () => {
+    assert.deepEqual(await invalidFor('acmerocketlaunch', ['x', 'hackernews', 'github']), ['hackernews', 'x']);
+  });
+
+  test('Bluesky handles are limited to 18 characters', async () => {
+    assert.deepEqual(await invalidFor('acmerocketlaunches', ['bluesky']), []);
+    assert.deepEqual(await invalidFor('acmerocketlaunchpad', ['bluesky']), ['bluesky']);
   });
 
   test('short names are rejected where platforms require a minimum length', async () => {
-    assert.deepEqual(await invalidFor('ab'), ['facebook', 'youtube']);
+    const expected = ['bluesky', 'facebook', 'pinterest', 'reddit', 'telegram', 'twitch', 'youtube'];
+    assert.deepEqual(await invalidFor('ab'), expected);
+  });
+
+  test('Telegram usernames must start with a letter', async () => {
+    assert.deepEqual(await invalidFor('1acme', ['telegram', 'twitch']), ['telegram']);
   });
 
   test('IDN-style double hyphens are rejected for domains', async () => {
-    const invalid = await invalidFor('ab--cd');
-    assert.ok(invalid.includes('com') && invalid.includes('app'));
+    const invalid = await invalidFor('ab--cd', [...TLDS]);
+    assert.deepEqual(invalid, [...TLDS].sort());
+  });
+});
+
+describe('defaults', () => {
+  test('only .com and the original eight social platforms are selected by default', () => {
+    const ids = PLATFORMS.filter((p) => p.defaultChecked).map((p) => p.id);
+    assert.deepEqual(ids, ['com', 'instagram', 'x', 'github', 'youtube', 'tiktok', 'threads', 'facebook', 'linkedin']);
+  });
+
+  test('every domain ending is offered, in order', () => {
+    assert.deepEqual(PLATFORMS.filter((p) => p.group === 'domains').map((p) => p.id), ['com', 'net', 'app', 'io', 'co', 'ai', 'pro']);
+  });
+
+  test('platform ids are unique', () => {
+    assert.equal(new Set(PLATFORMS.map((p) => p.id)).size, PLATFORMS.length);
   });
 });
 
@@ -111,6 +141,43 @@ describe('domains', () => {
   test('is unknown when every source fails', async () => {
     const r = await check('com', 'acme', []);
     assert.equal(r.status, STATUS.UNKNOWN);
+  });
+
+  test('.net is checked at Verisign', async () => {
+    const r = await check('net', 'acme', [['https://rdap.verisign.com/net/v1/domain/acme.net', json(404, {})]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+    assert.equal(r.via, 'Verisign RDAP');
+  });
+
+  for (const tld of ['io', 'ai', 'pro']) {
+    test(`.${tld} is checked at Identity Digital`, async () => {
+      const r = await check(tld, 'acme', [[`https://rdap.identitydigital.services/rdap/domain/acme.${tld}`, json(404, {})]]);
+      assert.equal(r.status, STATUS.AVAILABLE);
+      assert.equal(r.via, 'Identity Digital RDAP');
+    });
+  }
+
+  test('rdap.org answering "no RDAP service" is not mistaken for an unregistered domain', async () => {
+    const noService = json(404, { errorCode: 404, title: 'No RDAP service is available for this resource' });
+    const r = await check('ai', 'acme', [
+      ['https://rdap.org/', noService],
+      ['https://dns.google/resolve?name=acme.ai', json(200, { Status: 0, Answer: [{ data: 'ns1.example.' }] })],
+    ]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.via, 'Google DNS');
+  });
+
+  test('.io skips rdap.org, which has no .io service', async () => {
+    const r = await check('io', 'acme', [['https://dns.google/resolve?name=acme.io', json(200, { Status: 3 })]]);
+    assert.equal(r.status, STATUS.LIKELY);
+    assert.ok(!r.calls.some(({ url }) => url.startsWith('https://rdap.org/')));
+  });
+
+  test('.co has no public registry lookup, so only DNS is asked', async () => {
+    const r = await check('co', 'acme', [['https://dns.google/resolve?name=acme.co', json(200, { Status: 3 })]]);
+    assert.equal(r.status, STATUS.LIKELY);
+    assert.match(r.note, /\.co has no public registry lookup/);
+    assert.deepEqual(r.calls.map(({ url }) => url), ['https://dns.google/resolve?name=acme.co&type=NS']);
   });
 });
 
@@ -242,10 +309,18 @@ describe('Threads and Instagram', () => {
     assert.equal(out.instagram.status, STATUS.MANUAL);
   });
 
-  test('Instagram on its own is a manual check and makes no requests', async () => {
-    const r = await check('instagram', 'acme', []);
-    assert.equal(r.status, STATUS.MANUAL);
-    assert.equal(r.calls.length, 0);
+  test('Instagram on its own (or retried) looks Threads up itself', async () => {
+    const taken = await check('instagram', 'acme', threadsPage({ title: 'Acme (@acme) • Threads, Say more' }));
+    assert.equal(taken.status, STATUS.TAKEN);
+    assert.equal(taken.calls.length, 1);
+    const unknown = await check('instagram', 'acme', []);
+    assert.equal(unknown.status, STATUS.MANUAL);
+  });
+
+  test('Instagram reuses the Threads lookup when both are checked together', async () => {
+    const fetch = mockFetch(threadsPage({ title: 'Acme (@acme) • Threads, Say more' }));
+    await checkAll('acme', { fetch, platforms: PLATFORMS.filter((p) => ['instagram', 'threads'].includes(p.id)) });
+    assert.equal(fetch.calls.length, 1);
   });
 });
 
@@ -300,6 +375,214 @@ describe('LinkedIn', () => {
 
   test('is unknown when nothing answers', async () => {
     assert.equal((await check('linkedin', 'acme', [])).status, STATUS.UNKNOWN);
+  });
+});
+
+describe('Bluesky', () => {
+  const api = 'https://public.api.bsky.app/xrpc/';
+  const profile = `${api}app.bsky.actor.getProfile?actor=acme.bsky.social`;
+  const resolve = `${api}com.atproto.identity.resolveHandle?handle=acme.bsky.social`;
+  const notFound = json(400, { error: 'InvalidRequest', message: 'Profile not found' });
+
+  test('a profile means taken, with avatar', async () => {
+    const body = { did: 'did:plc:abc', handle: 'acme.bsky.social', displayName: 'Acme', avatar: 'https://cdn.bsky.app/a.jpg' };
+    const r = await check('bluesky', 'acme', [[profile, json(200, body)]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'Account: Acme');
+    assert.equal(r.avatar, body.avatar);
+  });
+
+  test('a handle that does not resolve means available', async () => {
+    const r = await check('bluesky', 'acme', [[profile, notFound], [resolve, json(400, { error: 'InvalidRequest', message: 'Unable to resolve handle' })]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+  });
+
+  test('a resolving handle without a profile (e.g. deactivated) is taken', async () => {
+    const r = await check('bluesky', 'acme', [[profile, notFound], [resolve, json(200, { did: 'did:plc:abc' })]]);
+    assert.equal(r.status, STATUS.TAKEN);
+  });
+
+  test('is unknown when the API is unreachable', async () => {
+    assert.equal((await check('bluesky', 'acme', [])).status, STATUS.UNKNOWN);
+  });
+});
+
+describe('Reddit', () => {
+  const available = 'https://www.reddit.com/api/username_available.json?user=acme';
+  const about = 'https://www.reddit.com/user/acme/about.json';
+
+  test('username_available answers directly', async () => {
+    assert.equal((await check('reddit', 'acme', [[available, json(200, true)]])).status, STATUS.AVAILABLE);
+    assert.equal((await check('reddit', 'acme', [[available, json(200, false)]])).status, STATUS.TAKEN);
+  });
+
+  test('falls back to the public profile', async () => {
+    const taken = await check('reddit', 'acme', [[about, json(200, { kind: 't2', data: { name: 'Acme' } })]]);
+    assert.equal(taken.status, STATUS.TAKEN);
+    assert.equal(taken.note, 'User u/Acme');
+    const missing = await check('reddit', 'acme', [[about, json(404, { message: 'Not Found', error: 404 })]]);
+    assert.equal(missing.status, STATUS.LIKELY);
+  });
+
+  test('a blocked network leaves it to be checked manually', async () => {
+    assert.equal((await check('reddit', 'acme', [])).status, STATUS.MANUAL);
+  });
+});
+
+describe('Pinterest', () => {
+  const pins = 'https://widgets.pinterest.com/v3/pidgets/users/acme/pins/';
+
+  test('a profile means taken, with avatar', async () => {
+    const body = { status: 'success', data: { user: { full_name: 'Acme', image_small_url: 'https://i.pinimg.com/a.jpg' }, pins: [] } };
+    const r = await check('pinterest', 'acme', [[pins, json(200, body)]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'Profile: Acme');
+    assert.equal(r.avatar, 'https://i.pinimg.com/a.jpg');
+  });
+
+  test('"User not found" means available', async () => {
+    const r = await check('pinterest', 'acme', [[pins, json(404, { status: 'failure', code: 30, message: 'User not found.' })]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+  });
+
+  test('falls back to api.pinterest.com when the widget host is rate limited', async () => {
+    const api = 'https://api.pinterest.com/v3/pidgets/users/acme/pins/';
+    const r = await check('pinterest', 'acme', [[pins, blocked()], [api, json(404, { status: 'failure', code: 30 })]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+    assert.deepEqual(r.calls.map((c) => c.url), [pins, api]);
+  });
+
+  test('other errors are unknown', async () => {
+    const api = 'https://api.pinterest.com/v3/pidgets/users/acme/pins/';
+    const r = await check('pinterest', 'acme', [[pins, json(429, { status: 'failure' })], [api, json(500, {})]]);
+    assert.equal(r.status, STATUS.UNKNOWN);
+  });
+});
+
+describe('Twitch', () => {
+  const ivr = 'https://api.ivr.fi/v2/twitch/user?login=acme';
+
+  test('an empty list means available', async () => {
+    assert.equal((await check('twitch', 'acme', [[ivr, json(200, [])]])).status, STATUS.AVAILABLE);
+  });
+
+  test('a channel means taken, banned or not', async () => {
+    const r = await check('twitch', 'acme', [[ivr, json(200, [{ login: 'acme', displayName: 'Acme', banned: true, logo: 'https://static-cdn.jtvnw.net/a.png' }])]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'Channel: Acme (banned)');
+    assert.equal(r.avatar, 'https://static-cdn.jtvnw.net/a.png');
+  });
+});
+
+describe('Discord', () => {
+  const invite = 'https://discord.com/api/v10/invites/acme';
+
+  test('an invite means taken, with the server icon', async () => {
+    const r = await check('discord', 'acme', [[invite, json(200, { code: 'acme', guild: { id: '1', name: 'Acme', icon: 'abc' } })]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.match(r.note, /Acme/);
+    assert.equal(r.avatar, 'https://cdn.discordapp.com/icons/1/abc.png?size=64');
+  });
+
+  test('"Unknown Invite" means available', async () => {
+    const r = await check('discord', 'acme', [[invite, json(404, { message: 'Unknown Invite', code: 10006 })]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+  });
+
+  test('rate limits are unknown', async () => {
+    assert.equal((await check('discord', 'acme', [[invite, json(429, { message: 'You are being rate limited.' })]])).status, STATUS.UNKNOWN);
+  });
+});
+
+describe('Telegram', () => {
+  const page = (data) => [['https://r.jina.ai/https://t.me/acmerocket', jina(data)]];
+
+  test('the generic contact page means likely available', async () => {
+    const r = await check('telegram', 'acmerocket', page({ title: 'Telegram: Contact @acmerocket', httpStatus: 200 }));
+    assert.equal(r.status, STATUS.LIKELY);
+  });
+
+  test('a named page means taken, even when the name starts with "Telegram"', async () => {
+    const r = await check('telegram', 'acmerocket', page({ title: 'Telegram News', httpStatus: 200 }));
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'In use by “Telegram News”');
+  });
+
+  test('a rate limit is unknown', async () => {
+    const r = await check('telegram', 'acmerocket', [['https://r.jina.ai/', json(429, {})]]);
+    assert.equal(r.status, STATUS.UNKNOWN);
+    assert.match(r.note, /rate limit/);
+  });
+});
+
+describe('Mastodon', () => {
+  const lookup = 'https://mastodon.social/api/v1/accounts/lookup?acct=acme';
+
+  test('an account means taken, with avatar', async () => {
+    const r = await check('mastodon', 'acme', [[lookup, json(200, { id: '1', acct: 'acme', display_name: 'Acme', avatar: 'https://files.mastodon.social/a.png' })]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'Account: Acme');
+  });
+
+  test('404 means available', async () => {
+    assert.equal((await check('mastodon', 'acme', [[lookup, json(404, { error: 'Record not found' })]])).status, STATUS.AVAILABLE);
+  });
+});
+
+describe('Tumblr', () => {
+  const avatar = 'https://api.tumblr.com/v2/blog/acme/avatar/64';
+
+  test('a redirect to the avatar means taken, without following it', async () => {
+    const r = await check('tumblr', 'acme', [[avatar, new Response(null, { status: 302, headers: { location: 'https://64.media.tumblr.com/a.png' } })]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.avatar, avatar);
+    assert.equal(r.calls[0].init.redirect, 'manual');
+  });
+
+  test('404 means available', async () => {
+    const r = await check('tumblr', 'acme', [[avatar, json(404, { meta: { status: 404, msg: 'Not Found' } })]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+  });
+
+  test('looks up a unique URL, because the CDN caches the CORS header of the first caller', async () => {
+    const routes = [[avatar, json(404, { meta: { status: 404, msg: 'Not Found' } })]];
+    const first = await check('tumblr', 'acme', routes);
+    const second = await check('tumblr', 'acme', routes);
+    assert.match(first.calls[0].url, /^https:\/\/api\.tumblr\.com\/v2\/blog\/acme\/avatar\/64\?_=[a-z0-9]+$/);
+    assert.notEqual(first.calls[0].url, second.calls[0].url);
+  });
+});
+
+describe('Substack', () => {
+  const page = (data) => [['https://r.jina.ai/https://acme.substack.com/', jina(data)]];
+
+  test('a 404 means available', async () => {
+    const r = await check('substack', 'acme', page({ title: '', warning: 'Target URL returned error 404: Not Found' }));
+    assert.equal(r.status, STATUS.AVAILABLE);
+  });
+
+  test('a publication means taken', async () => {
+    const r = await check('substack', 'acme', page({ title: 'Acme Weekly | Substack', httpStatus: 200 }));
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'Publication: Acme Weekly');
+  });
+});
+
+describe('Hacker News', () => {
+  const user = 'https://hacker-news.firebaseio.com/v0/user/acme.json';
+
+  test('a user means taken', async () => {
+    const r = await check('hackernews', 'acme', [[user, json(200, { id: 'acme', karma: 42 })]]);
+    assert.equal(r.status, STATUS.TAKEN);
+    assert.equal(r.note, 'User acme (42 karma)');
+  });
+
+  test('null means likely available (usernames are case-sensitive)', async () => {
+    assert.equal((await check('hackernews', 'acme', [[user, json(200, null)]])).status, STATUS.LIKELY);
+  });
+
+  test('is unknown when the API is unreachable', async () => {
+    assert.equal((await check('hackernews', 'acme', [])).status, STATUS.UNKNOWN);
   });
 });
 

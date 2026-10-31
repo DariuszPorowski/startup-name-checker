@@ -129,6 +129,67 @@ code { font-size: .9em; }
   .error { background: #7f1d1d; color: #fecaca; }
 }
 
+.pickers { display: grid; gap: 1rem; margin-top: 1.25rem; }
+
+.picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .45rem .75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A floated legend becomes an ordinary grid item instead of sitting on the fieldset border. */
+.picker legend {
+  float: left;
+  padding: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.picker-actions { display: flex; gap: .3rem; }
+
+.picker-actions button {
+  padding: .1rem .6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+}
+
+.picker-actions button:hover { border-color: var(--accent); color: var(--accent); }
+
+.chips { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: .4rem; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .7rem .3rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: .875rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip:hover { border-color: var(--accent); }
+.chip:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.chip input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.chip-icon { display: inline-flex; width: 1rem; height: 1rem; }
+.chip-icon svg { width: 100%; height: 100%; }
+.chip-icon:empty { display: none; }
+
 .results { margin-top: 2.25rem; }
 
 .results-head {
@@ -221,6 +282,28 @@ code { font-size: .9em; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.retry {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.retry svg { width: 1.1rem; height: 1.1rem; }
+.retry:hover { border-color: var(--border); background: var(--bg); color: var(--accent); }
+.retry[aria-disabled="true"] { opacity: .35; cursor: progress; }
+.retry[aria-disabled="true"]:hover { border-color: transparent; background: transparent; color: var(--muted); }
+/* Username rules don't change between attempts, so there is nothing to retry. */
+[data-status="invalid"] .retry { visibility: hidden; }
+
 @media (prefers-reduced-motion: reduce) {
   [data-status="checking"] .badge::before { animation: none; }
 }
@@ -268,11 +351,11 @@ code { font-size: .9em; }
 
 @media (max-width: 560px) {
   .search { flex-direction: column; }
-  /* Badge sits beside the title; notes get the full row width. */
+  /* Badge and retry sit beside the title; notes get the full row width. */
   .row {
     display: grid;
-    grid-template-columns: 1.4rem minmax(0, 1fr) auto;
-    grid-template-areas: "icon title badge" "icon note note" "icon via via";
+    grid-template-columns: 1.4rem minmax(0, 1fr) auto auto;
+    grid-template-areas: "icon title badge retry" "icon note note note" "icon via via via";
     align-items: center;
     gap: .1rem .7rem;
     padding: .75rem .85rem;
@@ -283,5 +366,6 @@ code { font-size: .9em; }
   .note { grid-area: note; }
   .via { grid-area: via; }
   .badge { grid-area: badge; justify-self: end; }
+  .retry { grid-area: retry; width: 1.75rem; height: 1.75rem; }
   .avatar { display: none; }
 }

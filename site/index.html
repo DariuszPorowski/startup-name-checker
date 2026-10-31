@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src https://rdap.verisign.com https://pubapi.registry.google https://rdap.org https://dns.google https://api.github.com https://publish.x.com https://api.fxtwitter.com https://www.tiktok.com https://graph.facebook.com https://unavatar.io https://r.jina.ai https://api.microlink.io; base-uri 'none'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src https://rdap.verisign.com https://pubapi.registry.google https://rdap.identitydigital.services https://rdap.org https://dns.google https://api.github.com https://publish.x.com https://api.fxtwitter.com https://www.tiktok.com https://graph.facebook.com https://unavatar.io https://r.jina.ai https://api.microlink.io https://public.api.bsky.app https://www.reddit.com https://widgets.pinterest.com https://api.pinterest.com https://api.ivr.fi https://discord.com https://mastodon.social https://api.tumblr.com https://hacker-news.firebaseio.com; base-uri 'none'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
-  <title>Startup Name Checker — .com, .app &amp; social handles</title>
-  <meta name="description" content="Check whether a startup name is free as a .com and .app domain and on Instagram, X, GitHub, YouTube, TikTok, Threads, Facebook and LinkedIn — all at once, right in your browser.">
+  <title>Startup Name Checker — domains &amp; social handles</title>
+  <meta name="description" content="Check whether a startup name is free as a .com, .net, .app, .io, .co, .ai or .pro domain and on Instagram, X, GitHub, YouTube, TikTok, Threads, Facebook, LinkedIn, Bluesky, Reddit, Pinterest, Twitch, Discord, Telegram, Mastodon, Tumblr, Substack and Hacker News — all at once, right in your browser.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Startup Name Checker">
-  <meta property="og:description" content="Is your startup name free? Check .com, .app and 8 social platforms at once.">
+  <meta property="og:description" content="Is your startup name free? Check 7 domain endings and 18 social platforms at once.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
@@ -19,18 +19,39 @@
   <main class="container">
     <header class="hero">
       <h1>Startup Name Checker</h1>
-      <p class="lead">Is your name free? Check <strong>.com</strong>, <strong>.app</strong> and 8 social platforms at once — right in your browser.</p>
+      <p class="lead">Is your name free? Check domains like <strong>.com</strong> and up to 18 social platforms at once — right in your browser.</p>
     </header>
 
-    <form id="search" class="search" role="search" method="get" novalidate>
-      <label for="name" class="visually-hidden">Startup name</label>
-      <input id="name" name="name" type="text" placeholder="e.g. acmerocket" maxlength="100" required
-        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="hint error">
-      <button type="submit">Check</button>
+    <form id="search" role="search" method="get" novalidate>
+      <div class="search">
+        <label for="name" class="visually-hidden">Startup name</label>
+        <input id="name" name="name" type="text" placeholder="e.g. acmerocket" maxlength="100" required
+          autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="hint error">
+        <button type="submit">Check</button>
+      </div>
+      <p id="hint" class="hint">Letters, numbers, dots, hyphens and underscores. Spaces, <code>@</code> and a trailing domain ending like <code>.com</code> are removed.</p>
+      <p id="error" class="error" role="alert" hidden></p>
+      <noscript><p class="error">This tool runs in your browser and needs JavaScript.</p></noscript>
+
+      <div class="pickers">
+        <fieldset class="picker" data-group="domains">
+          <legend>Domains</legend>
+          <div class="picker-actions">
+            <button type="button" data-select="all" aria-label="All domains">All</button>
+            <button type="button" data-select="none" aria-label="None of the domains">None</button>
+          </div>
+          <div id="chips-domains" class="chips"></div>
+        </fieldset>
+        <fieldset class="picker" data-group="social">
+          <legend>Social media</legend>
+          <div class="picker-actions">
+            <button type="button" data-select="all" aria-label="All social media">All</button>
+            <button type="button" data-select="none" aria-label="None of the social media">None</button>
+          </div>
+          <div id="chips-social" class="chips"></div>
+        </fieldset>
+      </div>
     </form>
-    <p id="hint" class="hint">Letters, numbers, dots, hyphens and underscores. Spaces, <code>@</code> and a trailing <code>.com</code>/<code>.app</code> are removed.</p>
-    <p id="error" class="error" role="alert" hidden></p>
-    <noscript><p class="error">This tool runs in your browser and needs JavaScript.</p></noscript>
 
     <section id="results" class="results" aria-labelledby="results-title" hidden>
       <div class="results-head">
@@ -47,12 +68,14 @@
       <summary>How it works</summary>
       <p>Every lookup goes directly from your browser to a public service — there is no backend, nothing is stored, and nothing is tracked.</p>
       <ul>
-        <li><strong>.com / .app</strong> — official registry RDAP (Verisign, Google Registry), falling back to rdap.org and Google Public DNS.</li>
+        <li><strong>Domains</strong> — the registry’s official RDAP service (Verisign for .com and .net, Google Registry for .app, Identity Digital for .io, .ai and .pro), falling back to rdap.org and Google Public DNS. <strong>.co</strong> has no public registry lookup, so it’s checked through DNS only.</li>
         <li><strong>GitHub</strong> — GitHub REST API. <strong>X</strong> — X oEmbed, falling back to FxTwitter.</li>
         <li><strong>YouTube</strong> — Unavatar. <strong>TikTok</strong> — TikTok oEmbed. <strong>Facebook</strong> — Graph API (detects public Pages only; personal profiles can’t be checked).</li>
-        <li><strong>Threads, LinkedIn</strong> and fallbacks — the public page is read through Jina Reader (or Microlink).</li>
+        <li><strong>Bluesky, Reddit, Pinterest, Discord, Mastodon, Tumblr, Hacker News</strong> — their public APIs. <strong>Twitch</strong> — ivr.fi. Bluesky checks <code>NAME.bsky.social</code>, Mastodon checks mastodon.social and Discord checks custom invite links (<code>discord.gg/NAME</code>). Reddit blocks some networks, such as VPNs — then open the link.</li>
+        <li><strong>Threads, LinkedIn, Telegram, Substack</strong> and fallbacks — the public page is read through Jina Reader (or Microlink).</li>
         <li><strong>Instagram</strong> blocks automated lookups, so open the link to check. If the handle has a Threads profile, it’s marked taken because Threads shares Instagram usernames.</li>
       </ul>
+      <p>Pick what to check with the checkboxes under the search box. Your choice is kept in the page address, so you can bookmark or share it. Use the <strong>↻</strong> button on a result to check just that one again.</p>
       <dl class="legend">
         <div><dt><span class="badge" data-status="available">Available</span></dt><dd>The service confirmed nobody uses the name.</dd></div>
         <div><dt><span class="badge" data-status="likely">Likely available</span></dt><dd>No trace found, but the service can’t fully confirm it.</dd></div>
@@ -67,21 +90,26 @@
 
   <footer class="footer">
     <p>No backend, no cookies, no tracking. The name you check is sent straight from your browser to the services that answer the lookups.</p>
-    <p>Data: Verisign &amp; Google Registry RDAP, rdap.org, Google Public DNS, GitHub API, X oEmbed, FxTwitter, TikTok oEmbed, Facebook Graph API, Jina Reader, Microlink. <a href="https://unavatar.io" target="_blank">Avatars provided by Unavatar</a>.</p>
-    <p><a href="https://github.com/DariuszPorowski/startup-name-checker" target="_blank">Source on GitHub</a> · Not affiliated with any of the services checked.</p>
+    <p>Data: Verisign, Google Registry &amp; Identity Digital RDAP, rdap.org, Google Public DNS, GitHub API, X oEmbed, FxTwitter, TikTok oEmbed, Facebook Graph API, the Bluesky, Reddit, Pinterest, Discord, mastodon.social, Tumblr and Hacker News APIs, ivr.fi, Jina Reader, Microlink. <a href="https://unavatar.io" target="_blank" rel="noopener noreferrer">Avatars provided by Unavatar</a>.</p>
+    <p><a href="https://github.com/DariuszPorowski/startup-name-checker" target="_blank" rel="noopener noreferrer">Source on GitHub</a> · Not affiliated with any of the services checked.</p>
   </footer>
 
   <template id="row-template">
     <li class="row" data-status="checking">
       <span class="icon"></span>
       <div class="main">
-        <div class="title"><span class="label"></span> <a class="link" target="_blank"></a></div>
+        <div class="title"><span class="label"></span> <a class="link" target="_blank" rel="noopener noreferrer"></a></div>
         <div class="note"></div>
         <div class="via"></div>
       </div>
       <img class="avatar" alt="" width="28" height="28" referrerpolicy="no-referrer" hidden>
       <span class="badge"></span>
+      <button type="button" class="retry" title="Check again" aria-disabled="true"></button>
     </li>
+  </template>
+
+  <template id="chip-template">
+    <label class="chip"><input type="checkbox"><span class="chip-icon"></span><span class="chip-label"></span></label>
   </template>
 </body>
 </html>
