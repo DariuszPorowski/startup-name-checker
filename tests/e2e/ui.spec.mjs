@@ -11,6 +11,7 @@ const ACME = [
   ['https://rdap.verisign.com/com/v1/domain/acmerocket.com', json(404, {})],
   ['https://rdap.verisign.com/net/v1/domain/acmerocket.net', registered('2015-07-01')],
   ['https://rdap.publicinterestregistry.org/rdap/domain/acmerocket.org', json(404, {})],
+  ['https://rdap.identitydigital.services/rdap/domain/acmerocket.info', json(404, {})],
   ['https://pubapi.registry.google/rdap/domain/acmerocket.app', registered('2019-03-02')],
   ['https://pubapi.registry.google/rdap/domain/acmerocket.dev', registered('2020-02-28')],
   ['https://rdap.identitydigital.services/rdap/domain/acmerocket.io', json(404, {})],
@@ -21,6 +22,10 @@ const ACME = [
   ['https://rdap.registry.cloud/rdap/domain/acmerocket.cloud', json(404, {})],
   ['https://rdap.radix.host/rdap/domain/acmerocket.tech', registered('2021-06-30')],
   ['https://rdap.centralnic.com/xyz/domain/acmerocket.xyz', json(404, {})],
+  ['https://rdap.nic.design/domain/acmerocket.design', registered('2022-04-12')],
+  ['https://rdap.radix.host/rdap/domain/acmerocket.online', json(404, {})],
+  ['https://rdap.gmoregistry.net/rdap/domain/acmerocket.shop', json(404, { errorCode: 404, title: 'Error in processing request' })],
+  ['https://rdap.radix.host/rdap/domain/acmerocket.store', registered('2017-09-18')],
   ['https://api.github.com/users/acmerocket', json(404, { message: 'Not Found' })],
   ['https://publish.x.com/oembed?url=https://x.com/acmerocket', json(200, { url: 'https://x.com/AcmeRocket' })],
   ['https://unavatar.io/youtube/acmerocket', json(404, {})],
@@ -44,6 +49,7 @@ const EXPECTED = {
   com: 'available',
   net: 'taken',
   org: 'available',
+  info: 'available',
   app: 'taken',
   dev: 'taken',
   io: 'available',
@@ -54,6 +60,10 @@ const EXPECTED = {
   cloud: 'available',
   tech: 'taken',
   xyz: 'available',
+  design: 'taken',
+  online: 'available',
+  shop: 'available',
+  store: 'taken',
   instagram: 'taken',
   x: 'taken',
   github: 'available',
@@ -142,7 +152,7 @@ test('checks a name against the default selection', async ({ page }) => {
   await expect(row(page, 'tiktok').getByRole('link')).toHaveAttribute('href', 'https://www.tiktok.com/@acmerocket');
   await expect(row(page, 'linkedin').getByRole('link')).toHaveText('linkedin.com/company/acmerocket');
   await expect(page.locator('#results')).toHaveAttribute('aria-busy', 'false');
-  const unselected = /publicinterestregistry|registry\.google|identitydigital|registry\.cloud|radix|centralnic|bsky|ivr\.fi|discord|tumblr/;
+  const unselected = /publicinterestregistry|registry\.google|identitydigital|registry\.cloud|radix|centralnic|nic\.design|gmoregistry|bsky|ivr\.fi|discord|tumblr/;
   expect(requests.filter((url) => unselected.test(url))).toEqual([]);
   expect(problems).toEqual([]);
 });
@@ -159,11 +169,14 @@ test('checks every domain and platform', async ({ page }) => {
   expect(await rowIds(page, '#list-domains .row')).toEqual([...TLDS]);
   expect(await rowIds(page, '#list-social .row')).toEqual(SOCIAL);
   for (const [id, status] of Object.entries(EXPECTED)) await expect(row(page, id), id).toHaveAttribute('data-status', status);
-  await expect(page.locator('#summary')).toHaveText('15 available · 5 likely available · 11 taken');
+  await expect(page.locator('#summary')).toHaveText('18 available · 5 likely available · 13 taken');
 
   await expect(row(page, 'net')).toContainText('Registered since 2015-07-01');
   await expect(row(page, 'tech')).toContainText('Registered since 2021-06-30');
   await expect(row(page, 'xyz')).toContainText('via CentralNic RDAP');
+  await expect(row(page, 'design')).toContainText('Registered since 2022-04-12');
+  await expect(row(page, 'shop')).toContainText('via GMO Registry RDAP');
+  await expect(row(page, 'store')).toContainText('via Radix RDAP');
   await expect(row(page, 'co')).toContainText('.co has no public registry lookup');
   await expect(row(page, 'so')).toContainText('.so has no public registry lookup');
   await expect(row(page, 'bluesky').getByRole('link')).toHaveAttribute('href', 'https://bsky.app/profile/acmerocket.bsky.social');

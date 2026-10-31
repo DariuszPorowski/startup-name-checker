@@ -327,10 +327,10 @@ function About() {
           <UnorderedList>
             <UnorderedList.Item>
               <strong>Domain endings</strong> — the registry’s official RDAP service: Verisign for .com and .net, Public
-              Interest Registry for .org, Google Registry for .app and .dev, Identity Digital for .io, .ai and .pro, the
-              .cloud registry, Radix for .tech and CentralNic for .xyz. When one doesn’t answer, rdap.org and Google Public
-              DNS are asked instead. <strong>.co</strong> and <strong>.so</strong> have no public registry lookup, so
-              they’re checked through DNS only.
+              Interest Registry for .org, Identity Digital for .info, .io, .ai and .pro, Google Registry for .app and .dev,
+              the .cloud and .design registries, Radix for .tech, .online and .store, CentralNic for .xyz and GMO Registry
+              for .shop. When one doesn’t answer, rdap.org and Google Public DNS are asked instead. <strong>.co</strong>{' '}
+              and <strong>.so</strong> have no public registry lookup, so they’re checked through DNS only.
             </UnorderedList.Item>
             <UnorderedList.Item>
               <strong>GitHub</strong> — GitHub REST API. <strong>X</strong> — X oEmbed, falling back to FxTwitter.

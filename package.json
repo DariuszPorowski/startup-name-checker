@@ -2,7 +2,7 @@
   "name": "startup-name-checker",
   "version": "1.0.0",
   "private": true,
-  "description": "Check if a startup name is free as a domain (.com, .net, .org, .app, .dev, .io, .co, .ai, .so, .pro, .cloud, .tech, .xyz) and on 18 social platforms — a static, browser-only page.",
+  "description": "Check if a startup name is free as a domain (.com, .net, .org, .info, .app, .dev, .io, .co, .ai, .so, .pro, .cloud, .tech, .xyz, .design, .online, .shop, .store) and on 18 social platforms — a static, browser-only page.",
   "license": "MIT",
   "type": "module",
   "engines": {

@@ -47,6 +47,8 @@ describe('normalizeName', () => {
     ['acme.dev', 'acme'],
     ['acme.cloud', 'acme'],
     ['acme.xyz', 'acme'],
+    ['acme.info', 'acme'],
+    ['https://acme.store/', 'acme'],
     ['deno.land', 'deno.land'],
     [undefined, ''],
   ]) {
@@ -108,7 +110,10 @@ describe('defaults', () => {
   });
 
   test('every domain ending is offered, in order', () => {
-    const tlds = ['com', 'net', 'org', 'app', 'dev', 'io', 'co', 'ai', 'so', 'pro', 'cloud', 'tech', 'xyz'];
+    const tlds = [
+      'com', 'net', 'org', 'info', 'app', 'dev', 'io', 'co', 'ai', 'so', 'pro', 'cloud', 'tech', 'xyz',
+      'design', 'online', 'shop', 'store',
+    ];
     assert.deepEqual(PLATFORMS.filter((p) => p.group === 'domains').map((p) => p.id), tlds);
   });
 
@@ -153,7 +158,7 @@ describe('domains', () => {
     assert.equal(r.via, 'Verisign RDAP');
   });
 
-  for (const tld of ['io', 'ai', 'pro']) {
+  for (const tld of ['info', 'io', 'ai', 'pro']) {
     test(`.${tld} is checked at Identity Digital`, async () => {
       const r = await check(tld, 'acme', [[`https://rdap.identitydigital.services/rdap/domain/acme.${tld}`, json(404, {})]]);
       assert.equal(r.status, STATUS.AVAILABLE);
@@ -167,6 +172,10 @@ describe('domains', () => {
     ['cloud', 'https://rdap.registry.cloud/rdap/', '.cloud registry RDAP'],
     ['tech', 'https://rdap.radix.host/rdap/', 'Radix RDAP'],
     ['xyz', 'https://rdap.centralnic.com/xyz/', 'CentralNic RDAP'],
+    ['design', 'https://rdap.nic.design/', '.design registry RDAP'],
+    ['online', 'https://rdap.radix.host/rdap/', 'Radix RDAP'],
+    ['shop', 'https://rdap.gmoregistry.net/rdap/', 'GMO Registry RDAP'],
+    ['store', 'https://rdap.radix.host/rdap/', 'Radix RDAP'],
   ]) {
     test(`.${tld} is checked at its registry`, async () => {
       const free = await check(tld, 'acme', [[`${base}domain/acme.${tld}`, json(404, { errorCode: 404, title: 'Not Found' })]]);
@@ -184,6 +193,13 @@ describe('domains', () => {
       assert.equal(r.via, 'rdap.org');
     });
   }
+
+  test('.shop: GMO’s 404 "Error in processing request" means not registered', async () => {
+    const notFound = json(404, { errorCode: 404, title: 'Error in processing request' });
+    const r = await check('shop', 'acme', [['https://rdap.gmoregistry.net/rdap/domain/acme.shop', notFound]]);
+    assert.equal(r.status, STATUS.AVAILABLE);
+    assert.equal(r.via, 'GMO Registry RDAP');
+  });
 
   test('rdap.org answering "no RDAP service" is not mistaken for an unregistered domain', async () => {
     const noService = json(404, { errorCode: 404, title: 'No RDAP service is available for this resource' });
