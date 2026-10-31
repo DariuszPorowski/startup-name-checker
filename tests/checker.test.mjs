@@ -44,7 +44,10 @@ describe('normalizeName', () => {
     ['acme.io', 'acme'],
     ['https://acme.ai', 'acme'],
     ['acme.com.co', 'acme.com'],
-    ['acme.dev', 'acme.dev'],
+    ['acme.dev', 'acme'],
+    ['acme.cloud', 'acme'],
+    ['acme.xyz', 'acme'],
+    ['deno.land', 'deno.land'],
     [undefined, ''],
   ]) {
     test(`${JSON.stringify(input)} -> ${JSON.stringify(expected)}`, () => assert.equal(normalizeName(input), expected));
@@ -105,7 +108,8 @@ describe('defaults', () => {
   });
 
   test('every domain ending is offered, in order', () => {
-    assert.deepEqual(PLATFORMS.filter((p) => p.group === 'domains').map((p) => p.id), ['com', 'net', 'app', 'io', 'co', 'ai', 'pro']);
+    const tlds = ['com', 'net', 'org', 'app', 'dev', 'io', 'co', 'ai', 'so', 'pro', 'cloud', 'tech', 'xyz'];
+    assert.deepEqual(PLATFORMS.filter((p) => p.group === 'domains').map((p) => p.id), tlds);
   });
 
   test('platform ids are unique', () => {
@@ -157,6 +161,30 @@ describe('domains', () => {
     });
   }
 
+  for (const [tld, base, via] of [
+    ['org', 'https://rdap.publicinterestregistry.org/rdap/', 'Public Interest Registry RDAP'],
+    ['dev', 'https://pubapi.registry.google/rdap/', 'Google Registry RDAP'],
+    ['cloud', 'https://rdap.registry.cloud/rdap/', '.cloud registry RDAP'],
+    ['tech', 'https://rdap.radix.host/rdap/', 'Radix RDAP'],
+    ['xyz', 'https://rdap.centralnic.com/xyz/', 'CentralNic RDAP'],
+  ]) {
+    test(`.${tld} is checked at its registry`, async () => {
+      const free = await check(tld, 'acme', [[`${base}domain/acme.${tld}`, json(404, { errorCode: 404, title: 'Not Found' })]]);
+      assert.equal(free.status, STATUS.AVAILABLE);
+      assert.equal(free.via, via);
+      const body = { objectClassName: 'domain', events: [{ eventAction: 'registration', eventDate: '2016-06-07T08:00:00Z' }] };
+      const taken = await check(tld, 'acme', [[`${base}domain/acme.${tld}`, json(200, body)]]);
+      assert.equal(taken.status, STATUS.TAKEN);
+      assert.equal(taken.note, 'Registered since 2016-06-07');
+    });
+
+    test(`.${tld} falls back to rdap.org`, async () => {
+      const r = await check(tld, 'acme', [[`https://rdap.org/domain/acme.${tld}`, json(404, {})]]);
+      assert.equal(r.status, STATUS.AVAILABLE);
+      assert.equal(r.via, 'rdap.org');
+    });
+  }
+
   test('rdap.org answering "no RDAP service" is not mistaken for an unregistered domain', async () => {
     const noService = json(404, { errorCode: 404, title: 'No RDAP service is available for this resource' });
     const r = await check('ai', 'acme', [
@@ -173,12 +201,14 @@ describe('domains', () => {
     assert.ok(!r.calls.some(({ url }) => url.startsWith('https://rdap.org/')));
   });
 
-  test('.co has no public registry lookup, so only DNS is asked', async () => {
-    const r = await check('co', 'acme', [['https://dns.google/resolve?name=acme.co', json(200, { Status: 3 })]]);
-    assert.equal(r.status, STATUS.LIKELY);
-    assert.match(r.note, /\.co has no public registry lookup/);
-    assert.deepEqual(r.calls.map(({ url }) => url), ['https://dns.google/resolve?name=acme.co&type=NS']);
-  });
+  for (const tld of ['co', 'so']) {
+    test(`.${tld} has no public registry lookup, so only DNS is asked`, async () => {
+      const r = await check(tld, 'acme', [[`https://dns.google/resolve?name=acme.${tld}`, json(200, { Status: 3 })]]);
+      assert.equal(r.status, STATUS.LIKELY);
+      assert.match(r.note, new RegExp(`\\.${tld} has no public registry lookup`));
+      assert.deepEqual(r.calls.map(({ url }) => url), [`https://dns.google/resolve?name=acme.${tld}&type=NS`]);
+    });
+  }
 });
 
 describe('GitHub', () => {

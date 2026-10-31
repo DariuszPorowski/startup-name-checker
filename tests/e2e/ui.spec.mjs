@@ -10,11 +10,17 @@ const registered = (date) => json(200, { objectClassName: 'domain', events: [{ e
 const ACME = [
   ['https://rdap.verisign.com/com/v1/domain/acmerocket.com', json(404, {})],
   ['https://rdap.verisign.com/net/v1/domain/acmerocket.net', registered('2015-07-01')],
+  ['https://rdap.publicinterestregistry.org/rdap/domain/acmerocket.org', json(404, {})],
   ['https://pubapi.registry.google/rdap/domain/acmerocket.app', registered('2019-03-02')],
+  ['https://pubapi.registry.google/rdap/domain/acmerocket.dev', registered('2020-02-28')],
   ['https://rdap.identitydigital.services/rdap/domain/acmerocket.io', json(404, {})],
   ['https://dns.google/resolve?name=acmerocket.co', json(200, { Status: 3 })],
   ['https://rdap.identitydigital.services/rdap/domain/acmerocket.ai', registered('2023-01-15')],
+  ['https://dns.google/resolve?name=acmerocket.so', json(200, { Status: 3 })],
   ['https://rdap.identitydigital.services/rdap/domain/acmerocket.pro', json(404, {})],
+  ['https://rdap.registry.cloud/rdap/domain/acmerocket.cloud', json(404, {})],
+  ['https://rdap.radix.host/rdap/domain/acmerocket.tech', registered('2021-06-30')],
+  ['https://rdap.centralnic.com/xyz/domain/acmerocket.xyz', json(404, {})],
   ['https://api.github.com/users/acmerocket', json(404, { message: 'Not Found' })],
   ['https://publish.x.com/oembed?url=https://x.com/acmerocket', json(200, { url: 'https://x.com/AcmeRocket' })],
   ['https://unavatar.io/youtube/acmerocket', json(404, {})],
@@ -37,11 +43,17 @@ const ACME = [
 const EXPECTED = {
   com: 'available',
   net: 'taken',
+  org: 'available',
   app: 'taken',
+  dev: 'taken',
   io: 'available',
   co: 'likely',
   ai: 'taken',
+  so: 'likely',
   pro: 'available',
+  cloud: 'available',
+  tech: 'taken',
+  xyz: 'available',
   instagram: 'taken',
   x: 'taken',
   github: 'available',
@@ -96,6 +108,14 @@ const row = (page, id) => page.locator(`.row[data-platform="${id}"]`);
 const rowIds = (page, selector = '.row') => page.locator(selector).evaluateAll((els) => els.map((el) => el.dataset.platform));
 const checkButton = (page) => page.getByRole('button', { name: 'Check', exact: true });
 const settled = (page) => expect(page.locator('.row[data-status="checking"]')).toHaveCount(0, { timeout: 20_000 });
+// Primer hides the native checkbox and draws its own box on top, so people click that box or the label.
+const clickLabel = (page, text) => page.locator('.chips').getByText(text, { exact: true }).click();
+const THEME_KEY = 'startup-name-checker:color-mode';
+const themeButton = (page) => page.getByRole('button', { name: /^Theme: / });
+const pageBackground = (page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+const savedTheme = (page) => page.evaluate((key) => localStorage.getItem(key), THEME_KEY);
+const WHITE = 'rgb(255, 255, 255)';
+const BLACK = 'rgb(0, 0, 0)';
 
 test('checks a name against the default selection', async ({ page }) => {
   const problems = watchProblems(page);
@@ -122,7 +142,8 @@ test('checks a name against the default selection', async ({ page }) => {
   await expect(row(page, 'tiktok').getByRole('link')).toHaveAttribute('href', 'https://www.tiktok.com/@acmerocket');
   await expect(row(page, 'linkedin').getByRole('link')).toHaveText('linkedin.com/company/acmerocket');
   await expect(page.locator('#results')).toHaveAttribute('aria-busy', 'false');
-  expect(requests.filter((url) => /registry\.google|identitydigital|bsky|ivr\.fi|discord|tumblr/.test(url))).toEqual([]);
+  const unselected = /publicinterestregistry|registry\.google|identitydigital|registry\.cloud|radix|centralnic|bsky|ivr\.fi|discord|tumblr/;
+  expect(requests.filter((url) => unselected.test(url))).toEqual([]);
   expect(problems).toEqual([]);
 });
 
@@ -138,13 +159,16 @@ test('checks every domain and platform', async ({ page }) => {
   expect(await rowIds(page, '#list-domains .row')).toEqual([...TLDS]);
   expect(await rowIds(page, '#list-social .row')).toEqual(SOCIAL);
   for (const [id, status] of Object.entries(EXPECTED)) await expect(row(page, id), id).toHaveAttribute('data-status', status);
-  await expect(page.locator('#summary')).toHaveText('12 available · 4 likely available · 9 taken');
+  await expect(page.locator('#summary')).toHaveText('15 available · 5 likely available · 11 taken');
 
   await expect(row(page, 'net')).toContainText('Registered since 2015-07-01');
+  await expect(row(page, 'tech')).toContainText('Registered since 2021-06-30');
+  await expect(row(page, 'xyz')).toContainText('via CentralNic RDAP');
   await expect(row(page, 'co')).toContainText('.co has no public registry lookup');
+  await expect(row(page, 'so')).toContainText('.so has no public registry lookup');
   await expect(row(page, 'bluesky').getByRole('link')).toHaveAttribute('href', 'https://bsky.app/profile/acmerocket.bsky.social');
   await expect(row(page, 'discord')).toContainText('Acme Rocket');
-  await expect(row(page, 'tumblr').locator('img.avatar')).toHaveAttribute('src', 'https://api.tumblr.com/v2/blog/acmerocket/avatar/64');
+  await expect(row(page, 'tumblr').locator('.avatar img')).toHaveAttribute('src', 'https://api.tumblr.com/v2/blog/acmerocket/avatar/64');
   expect(problems).toEqual([]);
 });
 
@@ -180,12 +204,15 @@ test('ticking a box adds its result and unticking removes it, without re-checkin
   await settled(page);
   const before = requests.length;
 
-  await page.getByRole('checkbox', { name: '.net' }).check();
+  await clickLabel(page, '.net');
+  await expect(page.getByRole('checkbox', { name: '.net' })).toBeChecked();
   await expect(row(page, 'net')).toHaveAttribute('data-status', 'taken');
   expect(await rowIds(page, '#list-domains .row')).toEqual(['com', 'net']);
   await expect(page).toHaveURL(/\?name=acmerocket&domains=com,net$/);
 
-  await page.getByRole('checkbox', { name: 'X', exact: true }).uncheck();
+  // Primer's drawn box passes clicks on to the real checkbox.
+  await page.locator('#pick-x + span').click();
+  await expect(page.getByRole('checkbox', { name: 'X', exact: true })).not.toBeChecked();
   await expect(row(page, 'x')).toHaveCount(0);
   await expect(page).toHaveURL(/&social=instagram,github,youtube,tiktok,threads,facebook,linkedin$/);
   await expect(page.locator('#summary')).toHaveText('5 available · 1 likely available · 3 taken');
@@ -198,7 +225,7 @@ test('needs at least one domain or platform', async ({ page }) => {
   await settled(page);
 
   await page.getByRole('button', { name: 'None of the domains' }).click();
-  await expect(page.getByRole('heading', { name: 'Domains' })).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Domains', exact: true })).toBeHidden();
   await expect(page.locator('#list-domains')).toBeHidden();
   await page.getByRole('button', { name: 'None of the social media' }).click();
   await expect(page.locator('.row')).toHaveCount(0);
@@ -209,7 +236,10 @@ test('needs at least one domain or platform', async ({ page }) => {
   await expect(page.getByRole('alert')).toHaveText(/Pick at least one domain or social media platform/);
   expect(requests.length).toBe(before);
 
-  await page.getByRole('checkbox', { name: 'GitHub' }).check();
+  const github = page.getByRole('checkbox', { name: 'GitHub' });
+  await github.focus();
+  await page.keyboard.press('Space');
+  await expect(github).toBeChecked();
   await expect(page.getByRole('alert')).toBeHidden();
   await expect(row(page, 'github')).toHaveAttribute('data-status', 'available');
   await expect(page.locator('#summary')).toHaveText('1 available');
@@ -236,7 +266,7 @@ test('retry re-checks just that one result', async ({ page }) => {
 
   await expect(row(page, 'github')).toHaveAttribute('data-status', 'available');
   await expect(retry).toBeFocused();
-  await expect(retry).toHaveAttribute('aria-disabled', 'false');
+  await expect(retry).not.toHaveAttribute('aria-disabled', 'true');
   await expect(page.locator('#results')).toHaveAttribute('aria-busy', 'false');
   expect(requests.slice(before)).toEqual(['https://api.github.com/users/acmerocket']);
   await expect(page.locator('#summary')).toHaveText('5 available · 1 likely available · 3 taken');
@@ -276,8 +306,8 @@ test('shows avatars from https sources only', async ({ page }) => {
   ]);
   await page.goto('./?name=acmerocket');
   await expect(row(page, 'github')).toHaveAttribute('data-status', 'taken');
-  await expect(row(page, 'github').locator('img.avatar')).toHaveAttribute('src', 'https://avatars.example/acme.svg');
-  await expect(row(page, 'com').locator('img.avatar')).toBeHidden();
+  await expect(row(page, 'github').locator('.avatar img')).toHaveAttribute('src', 'https://avatars.example/acme.svg');
+  await expect(row(page, 'com').locator('.avatar img')).toBeHidden();
 });
 
 test('a new search replaces the previous results and keeps the selection', async ({ page }) => {
@@ -292,4 +322,54 @@ test('a new search replaces the previous results and keeps the selection', async
   await expect(row(page, 'github').getByRole('link')).toHaveAttribute('href', 'https://github.com/other');
   await expect(page).toHaveURL(/\?name=other&social=github$/);
   await settled(page);
+});
+
+test('follows the system theme until a theme is picked, and remembers the pick', async ({ page }) => {
+  const problems = watchProblems(page);
+  await mockServices(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('./');
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-color-mode', 'auto');
+  await expect(themeButton(page)).toHaveAccessibleName('Theme: System');
+  expect(await pageBackground(page)).toBe(BLACK);
+  await page.emulateMedia({ colorScheme: 'light' });
+  expect(await pageBackground(page)).toBe(WHITE);
+
+  await themeButton(page).click();
+  await expect(page.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+  await expect(html).toHaveAttribute('data-color-mode', 'dark');
+  await expect(themeButton(page)).toHaveAccessibleName('Theme: Dark');
+  expect(await pageBackground(page)).toBe(BLACK);
+  expect(await savedTheme(page)).toBe('dark');
+
+  await page.reload();
+  await expect(html).toHaveAttribute('data-color-mode', 'dark');
+  await expect(themeButton(page)).toHaveAccessibleName('Theme: Dark');
+  expect(await pageBackground(page)).toBe(BLACK);
+
+  await themeButton(page).click();
+  await page.getByRole('menuitemradio', { name: 'Light' }).click();
+  await expect(html).toHaveAttribute('data-color-mode', 'light');
+  expect(await pageBackground(page)).toBe(WHITE);
+  expect(await savedTheme(page)).toBe('light');
+
+  await themeButton(page).click();
+  await page.getByRole('menuitemradio', { name: 'System' }).click();
+  await expect(html).toHaveAttribute('data-color-mode', 'auto');
+  await expect(themeButton(page)).toHaveAccessibleName('Theme: System');
+  expect(await savedTheme(page)).toBeNull();
+  expect(problems).toEqual([]);
+});
+
+test('applies a saved theme before the app has loaded', async ({ page }) => {
+  await mockServices(page);
+  await page.addInitScript((key) => localStorage.setItem(key, 'dark'), THEME_KEY);
+  // Keep the app bundle from loading: only the small theme script runs.
+  await page.route(/\/assets\/.*\.js$/, (route) => route.abort());
+  await page.goto('./');
+  await expect(page.locator('html')).toHaveAttribute('data-color-mode', 'dark');
+  await expect(page.locator('#root')).toBeEmpty();
+  expect(await pageBackground(page)).toBe(BLACK);
 });
