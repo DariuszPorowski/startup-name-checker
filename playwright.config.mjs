@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = 4173;
-const localUrl = `http://127.0.0.1:${port}/`;
+// `npm run preview` serves the production build here (see vite.config.js).
+const localUrl = 'http://127.0.0.1:4173/';
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -21,9 +21,13 @@ export default defineConfig({
     // Smoke tests against the real services; set LIVE_URL to test the deployed site.
     { name: 'live', testMatch: 'live.spec.mjs', timeout: 120_000, use: { baseURL: process.env.LIVE_URL || localUrl } },
   ],
-  webServer: {
-    command: `node tests/serve.mjs ${port}`,
-    url: localUrl,
-    reuseExistingServer: !process.env.CI,
-  },
+  // Tests run against the production build (dist/), which is what gets deployed. Not needed for a deployed LIVE_URL.
+  webServer: process.env.LIVE_URL
+    ? undefined
+    : {
+        command: 'npm run build && npm run preview',
+        url: localUrl,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

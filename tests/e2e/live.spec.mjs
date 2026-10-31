@@ -27,7 +27,7 @@ const rateLimited = (r) => r.status === 'unknown' && /limit/i.test(r.note);
 
 // Registries and official APIs must give the exact answer. Rate-limited services and page readers (Pinterest, Jina,
 // Unavatar, ivr.fi) may refuse shared CI networks, so for those only a wrong answer fails the test.
-const EXACT = ['com', 'net', 'app', 'io', 'co', 'ai', 'pro', 'x', 'bluesky', 'discord', 'mastodon', 'tumblr', 'hackernews'];
+const EXACT = [...TLDS, 'x', 'bluesky', 'discord', 'mastodon', 'tumblr', 'hackernews'];
 
 test('a well-known name is reported as taken', async ({ page }) => {
   const rows = await checkName(page, 'google');
@@ -45,7 +45,8 @@ test('a random name is reported as available', async ({ page }) => {
   const name = `zq${Date.now().toString(36)}x`;
   const rows = await checkName(page, name);
   for (const id of EXACT) {
-    const expected = { co: 'likely', hackernews: 'likely' }[id] || 'available';
+    // .co and .so are checked through DNS only, and Hacker News can't tell a free name from an unused one.
+    const expected = { co: 'likely', so: 'likely', hackernews: 'likely' }[id] || 'available';
     expect(rows[id].status, id).toBe(expected);
   }
   if (!rateLimited(rows.github)) expect(rows.github.status, 'github').toBe('available');
