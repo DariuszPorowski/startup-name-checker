@@ -2,9 +2,9 @@
 
 Check if a startup name is free as a **.com** and **.app** domain and on **Instagram, X, GitHub, YouTube, TikTok, Threads, Facebook and LinkedIn**, all at once.
 
-**▶ Try it: <https://dariuszporowski.github.io/startup-name-checker/>**
+**▶ Try it: <https://dariusz.porowski.dev/startup-name-checker/>**
 
-It's one static page with no backend, no build step, no cookies and no tracking. Your browser does every lookup itself, against public endpoints that allow cross-origin requests. To share a result, add `?name=`, for example <https://dariuszporowski.github.io/startup-name-checker/?name=acmerocket>.
+It's one static page with no backend, no build step, no cookies and no tracking. Your browser does every lookup itself, against public endpoints that allow cross-origin requests. To share a result, add `?name=`, for example <https://dariusz.porowski.dev/startup-name-checker/?name=acmerocket>.
 
 ![Screenshot of the results for "acmerocket"](docs/screenshot.png)
 
@@ -54,7 +54,7 @@ npm start                         # serves site/ at http://127.0.0.1:4173/
 npm run test:unit                 # lookup logic with a mocked network (node:test)
 npx playwright install chromium
 npm run test:e2e                  # UI tests in Chromium with a mocked network
-LIVE_URL=https://dariuszporowski.github.io/startup-name-checker/ npm run test:live   # real services
+LIVE_URL=https://dariusz.porowski.dev/startup-name-checker/ npm run test:live   # real services
 ```
 
 | File | Purpose |
@@ -69,7 +69,9 @@ To add or change a platform, edit the `PLATFORMS` list in `site/checker.js`. If 
 
 ## Deployment
 
-Every push to `main` runs the [CI workflow](.github/workflows/ci.yml). It runs the tests and then deploys `site/` to GitHub Pages. After that, the [Live check workflow](.github/workflows/live-check.yml) tests the deployed page against the real services. You can also start the live check manually.
+Every push to `main` runs the [CI workflow](.github/workflows/ci.yml). It runs the tests, publishes `site/` to the `gh-pages` branch and waits for GitHub Pages to build it. Then it runs the [Live check workflow](.github/workflows/live-check.yml), which tests the deployed page against the real services. You can also run the live check manually from the Actions tab.
+
+GitHub Pages is set to **Deploy from a branch**, using `gh-pages` and the `/ (root)` folder. In a fork, choose that setting after the first CI run has created the branch.
 
 ## Credits
 

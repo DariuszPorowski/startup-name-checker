@@ -1,25 +1,27 @@
 name: Live check
 
 # Runs the live smoke tests against the deployed page, so CORS is verified from the real origin.
+# CI calls it after every deployment. You can also run it manually.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       url:
         description: URL of the page to test
+        type: string
         required: false
-        default: https://dariuszporowski.github.io/startup-name-checker/
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL of the page to test (defaults to the GitHub Pages URL)
+        required: false
 
 permissions:
   contents: read
+  pages: read
 
 jobs:
   live:
     name: Live check
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,9 +31,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Resolve the page URL
+        id: url
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ inputs.url }}
+        run: |
+          if [ -z "$URL" ]; then
+            URL=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)
+            URL="https://${URL#*://}"
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
       - run: npm run test:live
         env:
-          LIVE_URL: ${{ inputs.url || 'https://dariuszporowski.github.io/startup-name-checker/' }}
+          LIVE_URL: ${{ steps.url.outputs.url }}
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7

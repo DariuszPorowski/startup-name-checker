@@ -41,20 +41,53 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write # push to the gh-pages branch
+      pages: read # wait for the Pages build
     concurrency:
       group: pages
       cancel-in-progress: false
+    outputs:
+      url: ${{ steps.pages.outputs.url }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v5
+      # GitHub Pages serves the gh-pages branch, so publish site/ there as a single commit.
+      - name: Publish site/ to the gh-pages branch
+        id: publish
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          touch site/.nojekyll
+          git add site/.nojekyll
+          sha=$(git commit-tree "$(git write-tree --prefix=site/)" -m "Deploy $GITHUB_SHA")
+          git push --force origin "$sha:refs/heads/gh-pages"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Wait for the Pages build
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.publish.outputs.sha }}
+        run: |
+          for _ in $(seq 60); do
+            build=$(gh api "repos/$GITHUB_REPOSITORY/pages/builds/latest" --jq '"\(.commit) \(.status)"' || true)
+            [ "$build" = "$SHA built" ] && break
+            [ "$build" = "$SHA errored" ] && { echo "::error::The GitHub Pages build failed"; exit 1; }
+            sleep 5
+          done
+          [ "$build" = "$SHA built" ] || { echo "::error::Timed out waiting for the GitHub Pages build"; exit 1; }
+          url=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)
+          url="https://${url#*://}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to <$url>" >> "$GITHUB_STEP_SUMMARY"
+
+  live:
+    name: Live check
+    needs: deploy
+    permissions:
+      contents: read
+      pages: read
+    uses: ./.github/workflows/live-check.yml
+    with:
+      url: ${{ needs.deploy.outputs.url }}
