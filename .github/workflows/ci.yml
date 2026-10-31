@@ -40,7 +40,9 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Pushes only come from main. A manual run deploys the branch it runs on,
+    # if the github-pages environment allows that branch.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
