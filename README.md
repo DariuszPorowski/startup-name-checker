@@ -90,7 +90,7 @@ To add or change a platform, edit the `PLATFORMS` list in `site/checker.js` and 
 
 ## Deployment
 
-Every push to `main` runs the [CI workflow](.github/workflows/ci.yml). It runs the tests, then uploads `site/` as an artifact and deploys it with GitHub's official Pages actions ([`configure-pages`](https://github.com/actions/configure-pages), [`upload-pages-artifact`](https://github.com/actions/upload-pages-artifact) and [`deploy-pages`](https://github.com/actions/deploy-pages)). There's no publishing branch. Then it runs the [Live check workflow](.github/workflows/live-check.yml), which tests the deployed page against the real services. A manual run of the CI workflow deploys the branch you run it on, if the `github-pages` environment allows that branch. You can also run the live check manually from the Actions tab.
+Every push to `main` runs the [CI workflow](.github/workflows/ci.yml). It runs the tests, then uploads `site/` as an artifact and deploys it with GitHub's official Pages actions ([`configure-pages`](https://github.com/actions/configure-pages), [`upload-pages-artifact`](https://github.com/actions/upload-pages-artifact) and [`deploy-pages`](https://github.com/actions/deploy-pages)). There's no publishing branch. Then it runs the [Live check workflow](.github/workflows/live-check.yml), which tests the deployed page against the real services. You can also run the live check manually from the Actions tab.
 
 Every action is pinned to a full commit SHA, with its version in a comment.
 
