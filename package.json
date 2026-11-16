@@ -18,13 +18,13 @@
     "test:live": "playwright test --project=live"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
-    "@vitejs/plugin-react": "^6.1.2",
-    "vite": "^8.3.5"
+    "@playwright/test": "^1.65.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "vite": "^8.3.6"
   },
   "dependencies": {
     "@primer/octicons-react": "^19.42.0",
-    "@primer/react-brand": "^0.80.1",
+    "@primer/react-brand": "^0.81.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }
